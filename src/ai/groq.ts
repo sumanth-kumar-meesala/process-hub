@@ -203,3 +203,43 @@ export async function testGroq(key: string, model: string) {
   if (!res.ok) throw new GroqError(res.status === 401 ? 'Key rejected' : `Error ${res.status}`, res.status)
   return true
 }
+
+/* ---------- "Ask about this process" (read-only Q&A for anyone) ---------- */
+const ASK_SYSTEM = `You answer questions from staff about ONE business process, using only the facts below.
+Write for a non-technical person: short, friendly, plain words, no jargon (explain any acronym). 1-4 sentences, or a short list if steps are asked for.
+If the facts don't say, answer "The process doesn't say — ask the process owner, OWNER." Never invent people, systems or rules.
+Reply ONLY with JSON: {"answer": string, "stage": number|null}  — stage = the 1-based stage the answer is mostly about, or null.`
+
+export function aboutFacts(p: Process, lib: LibraryItem[]) {
+  const title = (id: string) => lib.find((x) => x.id === id)?.title ?? id
+  const stages = p.stages.map((s, i) => {
+    const steps = p.steps.filter((x) => x.stageId === s.id && (x.kind === 'step' || x.kind === 'decision')).map((x) => {
+      const role = p.roles.find((r) => r.id === x.roleId)?.name ?? ''
+      const no = x.kind === 'decision' ? p.edges.find((e) => e.from === x.id && /^no$/i.test(e.label ?? '')) : undefined
+      const back = no ? ` (if no: back to "${p.steps.find((y) => y.id === no.to)?.label}")` : ''
+      const uses = x.resourceIds?.length ? ` [uses: ${x.resourceIds.map(title).join(', ')}]` : ''
+      return `  - ${x.kind === 'decision' ? 'CHECK: ' : ''}${x.label} — ${role}${back}${uses}`
+    }).join('\n')
+    return `STAGE ${i + 1}: ${s.title} (at ${s.place})${s.systems.length ? ` · systems: ${s.systems.join(', ')}` : ''}\n  ${s.text}\n${steps}`
+  }).join('\n')
+  const roles = p.roles.map((r) => `${r.name}${r.tools?.length ? ` (AI agent; tools: ${r.tools.join(', ')})` : ''}`).join('; ')
+  const linked = (p.linkedIds ?? []).map(title).join('; ')
+  return `PROCESS: ${p.title}\nOWNER: ${p.owner}\nSUMMARY: ${p.summary}\nIN A NUTSHELL: ${p.nutshell}\nSTARTS WHEN: ${p.triggers.join('; ')}\nDONE WHEN: ${p.outcomes.join('; ')}\nROLES: ${roles}\n${stages}${linked ? `\nPOLICIES & RELATED: ${linked}` : ''}`.slice(0, 14000)
+}
+
+export async function askAbout(opts: { key: string; model: string; process: Process; library: LibraryItem[]; history: ChatMsg[]; question: string; signal?: AbortSignal }) {
+  const facts = aboutFacts(opts.process, opts.library)
+  // keep within budget: facts + the last few turns
+  const hist: ChatMsg[] = []
+  let used = estTokens(facts) + estTokens(opts.question) + 300
+  for (const m of [...opts.history].reverse().slice(0, 4)) { const t = estTokens(m.content); if (used + t > INPUT_BUDGET) break; used += t; hist.unshift(m) }
+  const { text } = await callGroq(opts.key, {
+    model: opts.model, temperature: 0.2, max_tokens: 700, response_format: { type: 'json_object' }, ...tuning(opts.model),
+    messages: [{ role: 'system', content: ASK_SYSTEM.replace('OWNER', opts.process.owner) + '\n\nFACTS:\n' + facts }, ...hist, { role: 'user', content: opts.question }],
+  }, opts.signal)
+  try {
+    const j = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1))
+    const st = Number(j.stage)
+    return { answer: String(j.answer ?? '').trim() || 'Sorry, I could not find an answer.', stage: Number.isFinite(st) && st >= 1 && st <= opts.process.stages.length ? st : null }
+  } catch { return { answer: text.trim() || 'Sorry, I could not find an answer.', stage: null } }
+}

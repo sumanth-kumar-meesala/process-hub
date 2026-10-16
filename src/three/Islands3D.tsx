@@ -236,6 +236,74 @@ function Scenery({ kind, color }: { kind: string; color: string }) {
   }
 }
 
+/* ---------- inside an island: one platform per step ---------- */
+export interface WalkView { done: Set<string>; current?: string; finished: boolean; nonce: number }
+
+/** Where each step's platform sits on its island (island-local coords), left→right across the screen. */
+export function stepSpots(count: number): V3[] {
+  const R = Math.SQRT1_2
+  return Array.from({ length: count }, (_, i) => {
+    const t = count === 1 ? 0.5 : i / (count - 1)
+    const u = -1.3 + 2.6 * t
+    const w = count > 2 ? (i % 2 ? 0.5 : -0.5) : 0
+    return [(u + w) * R, 0, (-u + w) * R]
+  })
+}
+
+function StepPlatforms({ process, stageId, color, selected, hoverStep, onStep, walk, showLabels }: {
+  process: Process; stageId: string; color: string; selected?: string | null; hoverStep?: string | null
+  onStep?: (id: string) => void; walk?: WalkView | null; showLabels: boolean
+}) {
+  const steps = process.steps.filter((x) => x.stageId === stageId && (x.kind === 'step' || x.kind === 'decision'))
+  const spots = stepSpots(steps.length)
+  const grp = useRef<THREE.Group>(null)
+  useFrame((_, dt) => { if (grp.current) grp.current.scale.setScalar(THREE.MathUtils.damp(grp.current.scale.x, 1, 6, dt)) })
+  const at = (id: string) => spots[steps.findIndex((x) => x.id === id)]
+  const noLinks = process.edges.filter((e) => /^no$/i.test(e.label ?? '') && at(e.from) && at(e.to))
+  return (
+    <group ref={grp} scale={0.01}>
+      {spots.slice(1).map((q, i) => <Line key={i} points={[[spots[i][0], 0.12, spots[i][2]], [q[0], 0.12, q[2]]]} color={color} lineWidth={3} />)}
+      {noLinks.map((e) => {
+        const a = at(e.from), b = at(e.to)
+        return <QuadraticBezierLine key={e.id} start={[a[0], 0.2, a[2]]} end={[b[0], 0.2, b[2]]} mid={[(a[0] + b[0]) / 2 - 0.4, 1.4, (a[2] + b[2]) / 2 - 0.4]} color="#F97316" lineWidth={2.5} dashed dashSize={0.12} gapSize={0.08} />
+      })}
+      {steps.map((st, i) => {
+        const q = spots[i]
+        const role = process.roles.find((r) => r.id === st.roleId)
+        const isDone = walk?.done.has(st.id)
+        const isCur = walk?.current === st.id
+        const isSel = selected === st.id || hoverStep === st.id
+        const dec = st.kind === 'decision'
+        const top = isDone ? '#BBF7D0' : dec ? '#FDE68A' : '#FFFFFF'
+        const res = (st.resourceIds ?? []).length
+        return (
+          <group key={st.id} position={q}
+            onClick={(e) => { e.stopPropagation(); onStep?.(st.id) }}
+            onPointerOver={(e) => { e.stopPropagation(); document.body.style.cursor = 'pointer' }}
+            onPointerOut={() => { document.body.style.cursor = '' }}>
+            <mesh position={[0, 0.08, 0]} rotation={[0, dec ? Math.PI / 4 : 0, 0]}><boxGeometry args={[0.66, 0.16, 0.66]} /><M c={isCur ? color : isDone ? '#16A34A' : tint(color, 0.55)} /></mesh>
+            <mesh position={[0, 0.17, 0]} rotation={[0, dec ? Math.PI / 4 : 0, 0]}><boxGeometry args={[0.6, 0.03, 0.6]} /><M c={top} e={isCur ? 0.2 : 0} /></mesh>
+            {(isSel || isCur) && <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.46, 0.53, 32]} /><meshBasicMaterial color={isCur ? '#F59E0B' : color} /></mesh>}
+            {role && (roleKind(role) === 'agent'
+              ? <group scale={0.62}><Robot p={[0, 0.3, -0.05]} color={role.color} /></group>
+              : <Person p={[0, 0.19, -0.05]} color={role.color} scale={0.8} />)}
+            {isDone && !isCur && <mesh position={[0.24, 0.62, 0.24]}><sphereGeometry args={[0.1, 12, 10]} /><meshBasicMaterial color="#16A34A" /></mesh>}
+            {showLabels && (
+              <Html position={[0.55, -0.1, 0.55]} center zIndexRange={[14, 0]} style={{ pointerEvents: 'none' }}>
+                <div className="flex w-[150px] items-start gap-1.5 rounded-xl border bg-white px-2 py-1 shadow-sm" style={{ borderColor: isSel || isCur ? color : '#D3D7E2' }}>
+                  <span className="mt-px flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full text-[10px] font-extrabold text-white" style={{ background: dec ? '#D97706' : isDone ? '#16A34A' : color }}>{dec ? '?' : i + 1}</span>
+                  <span className="flex flex-col text-[11px] font-bold leading-tight text-[#151A25]">{st.label}
+                    <span className="text-[10px] font-semibold text-[#4A5163]">{role?.name}{res ? ` · ${res} doc${res > 1 ? 's' : ''}` : ''}</span></span>
+                </div>
+              </Html>
+            )}
+          </group>
+        )
+      })}
+    </group>
+  )
+}
+
 /* ---------- one floating island ---------- */
 interface IslandProps {
   pos: V3; color: string; top: string; side: string
@@ -286,23 +354,70 @@ function Pulse({ color }: { color: string }) {
   )
 }
 
-/* ---------- bridges with moving dots ---------- */
-function Bridge({ a, b }: { a: V3; b: V3 }) {
+/* ---------- bridges with moving dots (and walk progress) ---------- */
+export type BridgeState = 'plain' | 'done' | 'next' | 'todo'
+function Bridge({ a, b, state = 'plain', color = '#1D4ED8' }: { a: V3; b: V3; state?: BridgeState; color?: string }) {
   const dots = useRef<THREE.Group>(null)
+  const glow = useRef<THREE.MeshBasicMaterial>(null)
   const dir = new THREE.Vector3(b[0] - a[0], 0, b[2] - a[2])
   const len = dir.length()
   const angle = Math.atan2(dir.x, dir.z)
   const mid: V3 = [(a[0] + b[0]) / 2, -0.14, (a[2] + b[2]) / 2]
   useFrame(({ clock }) => {
     dots.current?.children.forEach((c, i) => {
-      const t = ((clock.elapsedTime * 0.35 + i / 4) % 1)
+      const t = ((clock.elapsedTime * (state === 'next' ? 0.7 : 0.35) + i / 4) % 1)
       c.position.set(0, 0.06, -len / 2 + t * len)
     })
+    if (glow.current) glow.current.opacity = state === 'next' ? 0.35 + Math.sin(clock.elapsedTime * 4) * 0.25 : state === 'done' ? 0.55 : 0
   })
+  const deck = state === 'done' ? color : state === 'todo' ? '#E2E8F0' : '#FFFFFF'
   return (
     <group position={mid} rotation={[0, angle, 0]}>
-      <mesh><boxGeometry args={[0.55, 0.06, len]} /><M c="#FFFFFF" /></mesh>
-      <group ref={dots}>{[0, 1, 2, 3].map((i) => <mesh key={i}><sphereGeometry args={[0.07, 10, 8]} /><meshBasicMaterial color="#1D4ED8" /></mesh>)}</group>
+      <mesh><boxGeometry args={[0.55, 0.06, len]} /><M c={deck} e={state === 'done' ? 0.25 : 0} /></mesh>
+      {(state === 'done' || state === 'next') && <mesh position={[0, -0.01, 0]}><boxGeometry args={[0.85, 0.04, len]} /><meshBasicMaterial ref={glow} color={color} transparent opacity={0.4} /></mesh>}
+      {state !== 'done' && state !== 'todo' && <group ref={dots}>{[0, 1, 2, 3].map((i) => <mesh key={i}><sphereGeometry args={[0.07, 10, 8]} /><meshBasicMaterial color={state === 'next' ? color : '#1D4ED8'} /></mesh>)}</group>}
+    </group>
+  )
+}
+
+/** A small green flag planted on an island the walker has finished. */
+const DoneFlag = () => (
+  <Float speed={3} floatIntensity={0.3} rotationIntensity={0}>
+    <group position={[-1.35, 0, -1.2]}>
+      <mesh position={[0, 0.6, 0]}><cylinderGeometry args={[0.03, 0.03, 1.2, 6]} /><M c="#334155" /></mesh>
+      <mesh position={[0.28, 1.05, 0]}><boxGeometry args={[0.55, 0.32, 0.03]} /><M c="#16A34A" /></mesh>
+      <mesh position={[0.28, 1.05, 0.02]} rotation={[0, 0, -0.75]}><boxGeometry args={[0.08, 0.2, 0.02]} /><meshBasicMaterial color="#FFFFFF" /></mesh>
+      <mesh position={[0.38, 1.08, 0.02]} rotation={[0, 0, 0.75]}><boxGeometry args={[0.07, 0.3, 0.02]} /><meshBasicMaterial color="#FFFFFF" /></mesh>
+    </group>
+  </Float>
+)
+
+/** Celebration burst: a short shower of coloured confetti whenever `nonce` changes. */
+function Confetti({ at, nonce }: { at: V3; nonce: number }) {
+  const g = useRef<THREE.Group>(null)
+  const parts = useMemo(() => Array.from({ length: 46 }, () => ({
+    v: new THREE.Vector3((Math.random() - 0.5) * 4, 3 + Math.random() * 3, (Math.random() - 0.5) * 4),
+    r: new THREE.Vector3(Math.random() * 6, Math.random() * 6, Math.random() * 6),
+    c: ['#F59E0B', '#2563EB', '#16A34A', '#DB2777', '#7C3AED', '#F97316'][Math.floor(Math.random() * 6)],
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  })), [nonce])
+  const t0 = useRef(-1)
+  useEffect(() => { t0.current = -1 }, [nonce])
+  useFrame(({ clock }) => {
+    if (!g.current || nonce === 0) return
+    if (t0.current < 0) t0.current = clock.elapsedTime
+    const t = clock.elapsedTime - t0.current
+    g.current.visible = t < 1.8
+    g.current.children.forEach((m, i) => {
+      const p = parts[i]
+      m.position.set(p.v.x * t, p.v.y * t - 4.5 * t * t, p.v.z * t)
+      m.rotation.set(p.r.x * t, p.r.y * t, p.r.z * t)
+    })
+  })
+  if (!nonce) return null
+  return (
+    <group ref={g} position={[at[0], at[1] + 1, at[2]]}>
+      {parts.map((p, i) => <mesh key={i}><planeGeometry args={[0.14, 0.09]} /><meshBasicMaterial color={p.c} side={THREE.DoubleSide} /></mesh>)}
     </group>
   )
 }
@@ -339,21 +454,34 @@ function Avatar({ target, label }: { target: V3; label: string }) {
   )
 }
 
-/** Fits the island chain to the canvas width (screen space), then applies the +/- zoom level.
- *  On narrow screens it zooms in on the current stage and follows it instead. */
-function FitCamera({ span, level, focus, narrow }: { span: number; level: number; focus: V3; narrow: boolean }) {
+/** Fits the island chain to the canvas, or glides in on one island when `focus` is set.
+ *  Narrow screens follow the current stage. +/- buttons outside change `level`. */
+function CameraRig({ span, level, center, focus, narrow }: { span: number; level: number; center: V3; focus: V3 | null; narrow: boolean }) {
   const { camera, size, controls } = useThree()
+  const goal = useRef({ zoom: 40, t: new THREE.Vector3(), moving: true })
   useEffect(() => {
+    const fitAll = Math.min(size.width / (span * 1.04), size.height / 11.5)
+    const zoomIn = Math.min(size.width / 8.5, size.height / 6.2)
+    const z = focus ? zoomIn : narrow ? size.width / 13 : fitAll
+    // when zoomed in on a wide screen, keep the island to the right of the details panel
+    const shift = focus && !narrow && size.width > 760 ? 175 / z : 0
+    const t = focus ? new THREE.Vector3(focus[0] - shift * Math.SQRT1_2, 0.4, focus[2] + shift * Math.SQRT1_2) : narrow ? new THREE.Vector3(center[0], -0.2, center[2]) : new THREE.Vector3(0, -0.2, 0)
+    goal.current = { zoom: z * Math.pow(1.2, level), t, moving: true }
+  }, [size.width, size.height, span, level, narrow, focus?.[0], focus?.[2], center[0], center[2]])
+  useFrame((_, dt) => {
+    const g = goal.current
+    if (!g.moving) return
     const cam = camera as THREE.OrthographicCamera
-    const fit = narrow ? size.width / 13 : Math.min(size.width / (span * 1.04), size.height / 11.5)
-    const t = narrow ? new THREE.Vector3(focus[0], -0.2, focus[2]) : new THREE.Vector3(0, -0.2, 0)
-    cam.zoom = fit * Math.pow(1.2, level)
-    cam.position.set(t.x + 18, t.y + 16, t.z + 18)
-    cam.lookAt(t)
     const c = controls as unknown as { target?: THREE.Vector3; update?: () => void } | null
-    if (c?.target) { c.target.copy(t); c.update?.() }
+    const cur = c?.target ?? new THREE.Vector3()
+    cur.x = THREE.MathUtils.damp(cur.x, g.t.x, 5, dt); cur.y = THREE.MathUtils.damp(cur.y, g.t.y, 5, dt); cur.z = THREE.MathUtils.damp(cur.z, g.t.z, 5, dt)
+    cam.zoom = THREE.MathUtils.damp(cam.zoom, g.zoom, 5, dt)
+    cam.position.set(cur.x + 18, cur.y + 16, cur.z + 18)
+    cam.lookAt(cur)
+    c?.update?.()
     cam.updateProjectionMatrix()
-  }, [camera, controls, size.width, size.height, span, level, narrow, focus[0], focus[2]])
+    if (Math.abs(cam.zoom - g.zoom) < 0.05 && cur.distanceTo(g.t) < 0.01) g.moving = false
+  })
   return null
 }
 
@@ -375,9 +503,18 @@ export interface IslandsProps {
   compact?: boolean
   avatarLabel?: string
   zoomLevel?: number
+  /** zoomed-in stage (shows its step platforms) */
+  focus?: number | null
+  selectedStep?: string | null
+  hoverStep?: string | null
+  onStep?: (id: string) => void
+  /** "Walk it with me" progress */
+  walk?: WalkView | null
+  /** clicked empty space (used to zoom back out) */
+  onBackground?: () => void
 }
 
-export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0 }: IslandsProps) {
+export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground }: IslandsProps) {
   const n = process.stages.length
   const items = n + 2
   const gap = 5.4
@@ -392,11 +529,28 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
   const stageRoleList = useMemo<Role[][]>(() => process.stages.map((s) => stageRoles(process, s)), [process])
   const loops = useMemo(() => loopsOf(process), [process])
   const narrow = useNarrow()
-  const dimOf = (k: number) => !!roleFilter && !stageRoleList[k].some((r) => r.id === roleFilter)
-  const avatarTarget: V3 = n ? (() => { const p = posOf(active + 1); return [p[0] + 1.05, 0.45, p[2] + 1.1] })() : posOf(0)
+  const dimOf = (k: number) => focus !== null ? focus !== k : (!!roleFilter && !stageRoleList[k].some((r) => r.id === roleFilter))
+  // walking: which stage the walker is on, and which stages are finished
+  const stepStage = (id?: string) => process.stages.findIndex((st) => st.id === process.steps.find((x) => x.id === id)?.stageId)
+  const curStage = walk ? (walk.finished ? n : Math.max(0, stepStage(walk.current))) : -1
+  const stageDone = (k: number) => !!walk && (walk.finished || k < curStage)
+  const bridgeState = (i: number): BridgeState => !walk ? 'plain' : i < curStage + 1 || walk.finished ? 'done' : i === curStage + 1 ? 'next' : 'todo'
+  const avatarTarget: V3 = (() => {
+    if (!n) return posOf(0)
+    if (walk?.finished) { const p = posOf(items - 1); return [p[0] + 0.9, 0.05, p[2] + 0.9] }
+    const k = walk ? curStage : active
+    const p = posOf(k + 1)
+    const lift = k === active || k === focus ? 0.45 : 0
+    if (walk?.current && focus === k) {
+      const steps = process.steps.filter((x) => x.stageId === process.stages[k].id && (x.kind === 'step' || x.kind === 'decision'))
+      const q = stepSpots(steps.length)[Math.max(0, steps.findIndex((x) => x.id === walk.current))]
+      return [p[0] + q[0] + 0.25, lift + 0.2, p[2] + q[2] + 0.35]
+    }
+    return [p[0] + 1.05, lift, p[2] + 1.1]
+  })()
 
   return (
-    <Canvas flat orthographic camera={{ position: [18, 16, 18], zoom: 40, near: -100, far: 200 }} dpr={[1, 2]}
+    <Canvas onPointerMissed={() => onBackground?.()} flat orthographic camera={{ position: [18, 16, 18], zoom: 40, near: -100, far: 200 }} dpr={[1, 2]}
       style={{ touchAction: 'pan-y' }}
       aria-label={`3D view of ${process.title}`}>
       <hemisphereLight args={['#FFFFFF', '#C7D2FE', 1.1]} />
@@ -404,10 +558,10 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
       <directionalLight position={[8, 14, 6]} intensity={1.0} />
       <directionalLight position={[4, 6, 14]} intensity={0.55} />
               <group>
-          {Array.from({ length: items - 1 }).map((_, i) => <Bridge key={i} a={posOf(i)} b={posOf(i + 1)} />)}
+          {Array.from({ length: items - 1 }).map((_, i) => <Bridge key={i} a={posOf(i)} b={posOf(i + 1)} state={bridgeState(i)} color={process.stages[Math.min(i, n - 1)]?.color ?? '#0F766E'} />)}
 
           {/* start: one flag per trigger */}
-          <Island pos={posOf(0)} color="#64748B" top="#E2E8F0" side="#64748B">
+          <Island pos={posOf(0)} color="#64748B" top="#E2E8F0" side="#64748B" dim={focus !== null}>
             {process.triggers.slice(0, 7).map((_, i) => {
               const cols = ['#2563EB', '#16A34A', '#EA580C', '#7C3AED', '#DC2626', '#0EA5E9', '#DB2777']
               const x = -1.1 + (i % 3) * 1.1, z = -1 + Math.floor(i / 3) * 0.95
@@ -425,18 +579,22 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
             const isActive = k === active
             return (
               <Island key={s.id} pos={posOf(k + 1)} color={s.color} top={tint(s.color, 0.16)} side={s.color}
-                active={isActive && !compact} hovered={hover === k} dim={dimOf(k)}
+                active={(isActive || focus === k) && !compact} hovered={hover === k} dim={dimOf(k)}
                 onClick={onSelect ? () => onSelect(k) : undefined}
                 onOver={onHover ? () => onHover(k) : undefined} onOut={onHover ? () => onHover(null) : undefined}>
-                <Scenery kind={sceneFor(s)} color={s.color} />
-                {[...roles].sort((x, y) => Number(roleKind(y) === 'agent') - Number(roleKind(x) === 'agent')).slice(0, 3).map((r, i) => {
+                {focus === k && !compact && (
+                  <StepPlatforms process={process} stageId={s.id} color={s.color} selected={selectedStep} hoverStep={hoverStep} onStep={onStep} walk={walk} showLabels />
+                )}
+                {stageDone(k) && <DoneFlag />}
+                {focus !== k && <Scenery kind={sceneFor(s)} color={s.color} />}
+                {focus !== k && [...roles].sort((x, y) => Number(roleKind(y) === 'agent') - Number(roleKind(x) === 'agent')).slice(0, 3).map((r, i) => {
                   const pp: V3 = roleKind(r) === 'agent' ? [-0.75, 0, 1.0] : [0.2 + i * 0.6, 0, 1.15 - i * 0.15]
                   return roleKind(r) === 'agent'
                     ? <group key={r.id}><Robot p={pp} color={r.color} />{!compact && <ToolsOrbit p={[pp[0], pp[1] + 0.4, pp[2]]} tools={r.tools ?? []} color={r.color} labels={isActive} />}</group>
                     : <Person key={r.id} p={pp} color={r.color} />
                 })}
-                {process.steps.some((x) => x.stageId === s.id && x.kind === 'decision') && <CheckSign repeat={loops.some((l) => l.from === k && l.to === k)} />}
-                {!compact && s.systems[0] && (!narrow || isActive) && (
+                {focus !== k && process.steps.some((x) => x.stageId === s.id && x.kind === 'decision') && <CheckSign repeat={loops.some((l) => l.from === k && l.to === k)} />}
+                {!compact && s.systems[0] && (!narrow || isActive) && (focus === null || focus === k) && (
                   <Float speed={2} floatIntensity={0.6} rotationIntensity={0}>
                     <Html position={[1.1, 2.6, -1]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? 0.25 : 1 }}>
                       <div className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-white shadow">
@@ -446,7 +604,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                   </Float>
                 )}
                 {!compact && (
-                  <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? 0.3 : 1 }}>
+                  <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? (focus !== null ? 0 : 0.3) : 1 }}>
                     <div className="flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold" style={{ borderColor: s.color }}>
                       <span className="flex h-6 w-6 items-center justify-center rounded-full text-xs text-white" style={{ background: s.color }}>{k + 1}</span>{s.short}
                     </div>
@@ -457,7 +615,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
           })}
 
           {/* finish: trophy + one tick per outcome */}
-          <Island pos={posOf(items - 1)} color="#0F766E" top="#D5F3EF" side="#0F766E">
+          <Island pos={posOf(items - 1)} color="#0F766E" top="#D5F3EF" side="#0F766E" dim={focus !== null} active={!!walk?.finished}>
             <Float speed={2.4} floatIntensity={0.5} rotationIntensity={0.2}>
               <group position={[0, 0.1, 0]}>
                 <mesh position={[0, 0.08, 0]}><boxGeometry args={[0.7, 0.16, 0.7]} /><M c="#B45309" /></mesh>
@@ -468,24 +626,25 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
             {Array.from({ length: Math.max(1, Math.min(3, process.outcomes.length)) }).map((_, i) => (
               <mesh key={i} position={[-1.1 + i * 1.1, 0.25, 1.2 - (i % 2) * 2.3]}><sphereGeometry args={[0.22, 16, 12]} /><M c="#16A34A" /></mesh>
             ))}
-            {!compact && <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}><div className="whitespace-nowrap rounded-full border-[1.5px] border-teal-700 bg-white px-3.5 py-1.5 text-[13px] font-extrabold">It's done when</div></Html>}
+            {!compact && focus === null && <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}><div className="whitespace-nowrap rounded-full border-[1.5px] border-teal-700 bg-white px-3.5 py-1.5 text-[13px] font-extrabold">It's done when</div></Html>}
           </Island>
 
-          {!compact && (
+          {!compact && focus === null && (
             <Html position={[posOf(0)[0] + 1.9, -0.4, posOf(0)[2] + 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
               <div className="whitespace-nowrap rounded-full border border-slate-400 bg-white px-3.5 py-1.5 text-[13px] font-extrabold">It starts when</div>
             </Html>
           )}
-          {loops.filter((l) => l.from !== l.to).map((l) => (
+          {focus === null && loops.filter((l) => l.from !== l.to).map((l) => (
             <LoopArc key={`${l.from}-${l.to}`} a={posOf(l.from + 1)} b={posOf(l.to + 1)} compact={compact}
               focus={!narrow && (active === l.from || active === l.to)} short={l.from === l.to ? 'Repeats' : `${l.label || 'Back'} → stage ${l.to + 1}`}
               text={l.from === l.to ? `${l.label || 'Not yet'}? Repeat “${l.toStep}”` : `${l.label || 'Back'} → back to “${l.toStep}”`} />
           ))}
-          {!compact && n > 0 && <Avatar target={avatarTarget} label={avatarLabel} />}
+          {!compact && n > 0 && (walk || focus === null) && <Avatar target={avatarTarget} label={walk?.finished ? 'All done!' : avatarLabel} />}
+          {!compact && walk && <Confetti at={avatarTarget} nonce={walk.nonce} />}
         </group>
       <ContactShadows position={[0, -2.3, 0]} scale={items * gap * 1.4} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
       {!compact && <OrbitControls makeDefault enablePan={false} enableZoom={false} minPolarAngle={0.55} maxPolarAngle={1.15} />}
-      <FitCamera span={(items - 1) * gap + 5.2} level={zoomLevel} narrow={narrow && !compact} focus={posOf(n ? active + 1 : 0)} />
+      <CameraRig span={(items - 1) * gap + 5.2} level={zoomLevel} narrow={narrow && !compact} center={posOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
   )
 }

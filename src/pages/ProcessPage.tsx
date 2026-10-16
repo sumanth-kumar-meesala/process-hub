@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowRight, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, Flag, Minus, MousePointerClick, Pencil, Play, Plus, Trophy, Users, X, Monitor, ShieldCheck, Share2, HeartHandshake, Bot, Plug, Undo2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { ArrowRight, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, Flag, Minus, MousePointerClick, Pencil, Play, Plus, Trophy, Users, X, Monitor, ShieldCheck, Share2, HeartHandshake, Bot, Plug, Undo2, Footprints, MessageCircleQuestion, UserRound, ChevronDown } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { Card, Tag } from '@/components/ui/card'
@@ -11,6 +11,10 @@ import { allSystems, roleKind, stageRoles, stepCount } from '@/lib/derive'
 import { catOf, processResources, stageResources, stepResources } from '@/lib/resources'
 import { tint, type LibraryItem, type Process } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useWalk } from '@/lib/walk'
+import { Terms } from '@/components/Terms'
+import { WalkCard } from '@/components/process/WalkCard'
+import { AskPanel } from '@/components/process/AskPanel'
 
 type View = 'overview' | 'role' | 'owner'
 
@@ -33,11 +37,46 @@ function ProcessView({ proc }: { proc: Process }) {
   const [role, setRole] = useState<string | null>(null)
   const [zoom, setZoom] = useState(0)
   const [view, setView] = useState<View>('overview')
+  const [focus, setFocus] = useState<number | null>(null)
+  const [selStep, setSelStep] = useState<string | null>(null)
+  const [hoverStep, setHoverStep] = useState<string | null>(null)
+  const [walking, setWalking] = useState(false)
+  const [asking, setAsking] = useState(false)
+  const [params] = useSearchParams()
+  const w = useWalk(proc)
   const n = proc.stages.length
   const stage = proc.stages[i]
   const mine = role ? proc.stages.map((s, k) => (stageRoles(proc, s).some((r) => r.id === role) ? k + 1 : 0)).filter(Boolean) : []
-  const select = (k: number) => { setI(k); setOpen(true) }
-  const next = () => setI((x) => (n ? (x + 1) % n : 0))
+  // clicking an island zooms into it
+  const select = (k: number) => { setI(k); setOpen(true); setFocus(k); setSelStep(null) }
+  const zoomOut = () => { setFocus(null); setOpen(false); setSelStep(null); setHoverStep(null) }
+  const next = () => { const k = n ? (i + 1) % n : 0; if (focus !== null) select(k); else setI(k) }
+  const myRoleId = proc.roles.find((r) => r.name === myRole)?.id
+
+  // "One question to start" on the home page sends people here with ?as=<role>
+  useEffect(() => {
+    const as = params.get('as')
+    const r = as && proc.roles.find((x) => x.id === as || x.name.toLowerCase() === as.toLowerCase())
+    if (r) { setRole(r.id); }
+  }, [params, proc.roles])
+
+  // Esc zooms back out
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { if (asking) setAsking(false); else if (!walking) zoomOut() } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [asking, walking])
+
+  // while walking, the camera follows the walker from island to island
+  const walkStage = w.walk.current ? proc.stages.findIndex((s) => s.id === proc.steps.find((x) => x.id === w.walk.current)?.stageId) : -1
+  useEffect(() => {
+    if (!walking) return
+    if (w.walk.finished) { setFocus(null); return }
+    if (walkStage >= 0) { setI(walkStage); setFocus(walkStage) }
+  }, [walking, walkStage, w.walk.finished])
+  const startWalk = () => { if (!w.walk.started || w.walk.finished) w.start(); setWalking(true); setOpen(false) }
+  const stopWalk = () => { setWalking(false); setFocus(null) }
+  const walkView = walking ? { done: new Set(w.walk.done), current: w.walk.current, finished: w.walk.finished, nonce: w.walk.nonce } : null
 
   return (
     <div className="min-h-full">
@@ -60,7 +99,7 @@ function ProcessView({ proc }: { proc: Process }) {
                 {proc.code && <span className="inline-flex h-8 items-center rounded-[10px] bg-primary px-3 text-[15px] font-extrabold text-white">{proc.code}</span>}
                 <h1 className="m-0 text-[clamp(28px,4vw,40px)] font-extrabold leading-[1.05] tracking-[-0.02em]">{proc.title}</h1>
               </div>
-              <p className="m-0 max-w-[640px] text-base leading-normal text-on-surface-variant">{proc.summary}</p>
+              <p className="m-0 max-w-[640px] text-base leading-normal text-on-surface-variant"><Terms text={proc.summary} /></p>
             </div>
             <div className="flex flex-wrap gap-2.5">
               <OwnerCard label="Process owner" name={proc.owner} bg="#DFE7FF" fg="#0A2472" />
@@ -81,19 +120,37 @@ function ProcessView({ proc }: { proc: Process }) {
             {role && <span className="px-2.5 text-[13px] font-semibold text-primary">{mine.length ? `In stage${mine.length > 1 ? 's' : ''} ${mine.join(', ')}` : 'Not in any stage yet'}</span>}
           </div>
 
-          <div className="relative -mx-2 h-[clamp(320px,42vw,500px)]">
-            <Islands3D process={proc} active={i} onSelect={select} hover={hover} onHover={setHover} roleFilter={role} zoomLevel={zoom} avatarLabel="I am here" />
+          {n > 0 && (
+            <div className="relative z-[1] flex flex-wrap items-center gap-2">
+              <Button onClick={walking ? stopWalk : startWalk} className={walking ? 'bg-on-surface' : ''}>
+                <Footprints size={16} />{walking ? 'Stop walking' : w.walk.started && !w.walk.finished ? `Continue walking (${w.doneCount}/${w.total})` : 'Walk it with me'}
+              </Button>
+              <Button variant="outlined" onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={16} />Ask about this process</Button>
+              {w.walk.started && !walking && <Button variant="text" size="sm" onClick={w.reset}>Reset walk</Button>}
+            </div>
+          )}
+
+          <div className="relative -mx-2 flex flex-col gap-3">
+            <div className="relative h-[clamp(320px,42vw,500px)]">
+            <Islands3D process={proc} active={i} onSelect={(k) => { if (!walking) select(k) }} hover={hover} onHover={setHover} roleFilter={role} zoomLevel={zoom} avatarLabel={walking ? 'Me' : 'I am here'}
+              focus={focus} selectedStep={selStep} hoverStep={hoverStep} onStep={(id) => { if (!walking) setSelStep((x) => x === id ? null : id) }} walk={walkView} onBackground={() => { if (!walking && focus !== null) zoomOut() }} />
             {n === 0 && <div className="absolute inset-0 flex items-center justify-center"><span className="glass rounded-full px-5 py-2.5 text-sm font-bold">The owner hasn't added stages yet</span></div>}
 
-            {!open && n > 0 && (
-              <span className="glass absolute left-3 top-1 z-[40] inline-flex h-[34px] items-center gap-2 rounded-full px-3.5 text-[13px] font-bold text-on-surface-variant"><MousePointerClick size={14} aria-hidden />Click an island for details</span>
+            {!open && !walking && n > 0 && (
+              <span className="glass absolute left-3 top-1 z-[40] inline-flex h-[34px] items-center gap-2 rounded-full px-3.5 text-[13px] font-bold text-on-surface-variant"><MousePointerClick size={14} aria-hidden />Click an island to zoom in</span>
             )}
-            {open && stage && <StagePanel proc={proc} k={i} onClose={() => setOpen(false)} onNext={next} />}
-
             <div className="glass absolute bottom-3 right-3 z-[40] flex gap-0.5 rounded-full p-1">
               <Button variant="icon" size="icon" aria-label="Zoom out" onClick={() => setZoom((z) => z - 1)}><Minus size={18} /></Button>
               <Button variant="icon" size="icon" aria-label="Zoom in" onClick={() => setZoom((z) => z + 1)}><Plus size={18} /></Button>
             </div>
+            {focus !== null && !walking && (
+              <button onClick={zoomOut} className="glass absolute bottom-3 left-1/2 z-[40] inline-flex h-10 -translate-x-1/2 cursor-pointer items-center gap-2 rounded-full border-0 px-4 text-[13px] font-bold text-on-surface"><ChevronLeft size={16} />All stages<span className="font-semibold text-on-surface-variant max-sm:hidden">· Esc</span></button>
+            )}
+            </div>
+            {open && !walking && stage && <StagePanel proc={proc} k={i} onClose={zoomOut} onNext={next} selStep={selStep} onStep={(id) => setSelStep((x) => x === id ? null : id)} onHoverStep={setHoverStep} />}
+            {walking && <WalkCard proc={proc} w={w} onClose={stopWalk} />}
+            {asking && <AskPanel proc={proc} onClose={() => setAsking(false)} onShowStage={(k) => { setAsking(false); setWalking(false); select(k) }} />}
+
           </div>
 
           {n > 0 && (
@@ -104,11 +161,12 @@ function ProcessView({ proc }: { proc: Process }) {
                 <span className="text-[13px] text-on-surface-variant">{n} stages{stepCount(proc) ? ` · ${stepCount(proc)} steps` : ''}{proc.triggers.length ? ` · starts with 1 of ${proc.triggers.length} trigger${proc.triggers.length > 1 ? 's' : ''}` : ''}</span>
                 <div className="flex-1" />
                 <Button variant="outlined" size="iconLg" aria-label="Previous stage" onClick={() => setI((x) => Math.max(0, x - 1))}><ChevronLeft size={18} /></Button>
-                <Button onClick={next}><Play size={15} fill="#fff" />{i === n - 1 ? 'Play again' : 'Next stage'}</Button>
+                <Button variant="outlined" size="iconLg" aria-label="Next stage" onClick={next}><ChevronRight size={18} /></Button>
+                <Button onClick={() => select(focus === null ? i : (i + 1) % n)}><Play size={15} fill="#fff" />{focus === null ? 'Zoom in' : i === n - 1 ? 'Back to start' : 'Next stage'}</Button>
               </div>
               <div className="flex overflow-x-auto">
                 {proc.stages.map((s, k) => {
-                  const done = k <= i
+                  const done = walking ? (w.walk.finished || k < walkStage) : k <= i
                   return (
                     <button key={s.id} onClick={() => select(k)} className="flex min-w-[104px] flex-1 cursor-pointer flex-col items-center gap-2 border-0 bg-transparent px-0.5 text-center text-[13px] font-bold leading-tight text-on-surface">
                       <span className="flex w-full items-center">
@@ -166,7 +224,7 @@ function ResourceLink({ it, className, children }: { it: LibraryItem; className:
   return <a href="#" onClick={(e) => e.preventDefault()} title="No link added yet" className={className}>{children}</a>
 }
 
-function StagePanel({ proc, k, onClose, onNext }: { proc: Process; k: number; onClose: () => void; onNext: () => void }) {
+function StagePanel({ proc, k, onClose, onNext, selStep, onStep, onHoverStep }: { proc: Process; k: number; onClose: () => void; onNext: () => void; selStep: string | null; onStep: (id: string) => void; onHoverStep: (id: string | null) => void }) {
   const library = useData((st) => st.library)
   const s = proc.stages[k]
   const needs = stageResources(proc, s.id, library)
@@ -179,9 +237,9 @@ function StagePanel({ proc, k, onClose, onNext }: { proc: Process; k: number; on
     return { id: d.id, label: d.label, no, noStage: no ? proc.stages.findIndex((st) => st.id === no.stageId) : -1 }
   })
   return (
-    <aside className="glass absolute left-2 top-0 z-[40] flex max-h-full w-[340px] max-w-[calc(100%-16px)] flex-col overflow-hidden rounded-[28px] shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.22)]" aria-label={`Stage ${k + 1} details`}>
+    <aside className="absolute left-2 top-0 z-[40] flex max-h-full max-sm:static max-sm:w-full max-sm:max-w-none max-sm:max-h-none border border-outline-variant bg-white w-[340px] max-w-[calc(100%-16px)] flex-col overflow-hidden rounded-[28px] shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.22)]" aria-label={`Stage ${k + 1} details`}>
       <div className="relative flex flex-col gap-3 px-5 pb-4 pt-5" style={{ background: tint(s.color, 0.14) }}>
-        <button onClick={onClose} aria-label="Close details" className="absolute right-3.5 top-3.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-0 bg-white/75"><X size={16} /></button>
+        <button onClick={onClose} aria-label="Close and zoom out" className="absolute right-3.5 top-3.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-0 bg-white/75"><X size={16} /></button>
         <div className="flex items-center gap-3">
           <span className="flex h-[52px] w-[52px] items-center justify-center rounded-[18px] text-2xl font-extrabold text-white" style={{ background: s.color, boxShadow: `0 6px 16px ${s.color}55` }}>{k + 1}</span>
           <div className="flex flex-col"><span className="text-xs font-extrabold uppercase tracking-[.06em]" style={{ color: s.color }}>Stage {k + 1} of {proc.stages.length}</span><span className="text-[13px] text-on-surface-variant">at {s.place}</span></div>
@@ -189,20 +247,28 @@ function StagePanel({ proc, k, onClose, onNext }: { proc: Process; k: number; on
         <h2 className="m-0 pr-8 text-[22px] font-extrabold leading-tight">{s.title}</h2>
       </div>
       <div className="flex flex-col gap-4 overflow-y-auto px-5 pb-5 pt-4">
-        <p className="m-0 text-sm leading-relaxed text-on-surface-variant">{s.text}</p>
+        <p className="m-0 text-sm leading-relaxed text-on-surface-variant"><Terms text={s.text} /></p>
         {steps.length > 0 && (
-          <div className="flex flex-col gap-1.5"><span className="lbl">What happens</span>
-            {steps.map((st) => (
-              <div key={st.id} className="flex flex-col gap-1">
-                <div className="flex items-center gap-2 text-sm"><span className="h-1.5 w-1.5 flex-none rounded-full" style={{ background: s.color }} />{st.label}<span className="text-xs text-on-surface-variant">· {proc.roles.find((r) => r.id === st.roleId)?.name}</span></div>
-                {stepResources(st, library).length > 0 && (
-                  <div className="ml-3.5 flex flex-wrap gap-1">{stepResources(st, library).map((it) => (
-                    <span key={it.id} className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold" style={{ background: tint(catOf(it.category).color, 0.12), color: '#151A25' }}>
-                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: catOf(it.category).color }} />{it.title}</span>
-                  ))}</div>
-                )}
-              </div>
-            ))}
+          <div className="flex flex-col gap-1"><span className="lbl">What happens <span className="normal-case tracking-normal font-semibold">· tap a step</span></span>
+            {steps.map((st, n) => {
+              const on = selStep === st.id, dec = st.kind === 'decision', res = stepResources(st, library)
+              return (
+                <div key={st.id} className={cn('flex flex-col rounded-2xl transition-colors', on ? 'bg-surface-low' : '')}>
+                  <button onClick={() => onStep(st.id)} onMouseEnter={() => onHoverStep(st.id)} onMouseLeave={() => onHoverStep(null)} aria-expanded={on}
+                    className="flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border-0 bg-transparent px-2 py-1.5 text-left text-sm hover:bg-surface-low">
+                    <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-[11px] font-extrabold text-white" style={{ background: dec ? '#D97706' : s.color }}>{dec ? '?' : n + 1}</span>
+                    <span className="flex flex-1 flex-col leading-tight"><span className="font-semibold"><Terms text={st.label} /></span><span className="text-xs text-on-surface-variant">{proc.roles.find((r) => r.id === st.roleId)?.name}{res.length ? ` · ${res.length} doc${res.length > 1 ? 's' : ''}` : ''}</span></span>
+                    {res.length > 0 && <ChevronDown size={15} className={cn('text-on-surface-variant transition-transform', on && 'rotate-180')} />}
+                  </button>
+                  {on && res.length > 0 && (
+                    <div className="flex flex-col gap-1 px-2 pb-2 pl-10">{res.map((it) => (
+                      <ResourceLink key={it.id} it={it} className="flex items-center gap-2 rounded-lg bg-white px-2.5 py-1.5 text-[13px] font-semibold text-on-surface no-underline hover:shadow-sm">
+                        <span className="h-2 w-2 flex-none rounded-full" style={{ background: catOf(it.category).color }} /><span className="flex-1">{it.title}</span><ArrowUpRight size={14} className="text-on-surface-variant" /></ResourceLink>
+                    ))}</div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
         {roles.length > 0 && (
@@ -236,7 +302,7 @@ function StagePanel({ proc, k, onClose, onNext }: { proc: Process; k: number; on
             ))}
           </div>
         )}
-        {s.systems.length > 0 && <div className="flex flex-col gap-2"><span className="lbl">Systems</span><div className="flex flex-wrap gap-1.5">{s.systems.map((x) => <Tag key={x} className="bg-ink text-white">{x}</Tag>)}</div></div>}
+        {s.systems.length > 0 && <div className="flex flex-col gap-2"><span className="lbl">Systems</span><div className="flex flex-wrap gap-1.5">{s.systems.map((x) => <Tag key={x} className="bg-ink text-white"><Terms text={x} /></Tag>)}</div></div>}
         {(needs.length > 0 || s.docs.length > 0) && (
           <div className="flex flex-col gap-1.5"><span className="lbl">You'll need</span>
             {needs.map((it) => (
@@ -269,7 +335,7 @@ function Overview({ proc }: { proc: Process }) {
     <div className="flex flex-col gap-5">
       <Card className="flex flex-col gap-2.5 bg-secondary-container text-on-secondary-container">
         <span className="lbl text-on-secondary-container">In a nutshell</span>
-        <p className="m-0 text-[19px] font-semibold leading-relaxed">{proc.nutshell}</p>
+        <p className="m-0 text-[19px] font-semibold leading-relaxed"><Terms text={proc.nutshell} /></p>
         <p className="m-0 text-sm">Something not right? {proc.owner} looks after this one.</p>
       </Card>
       <div className="grid grid-cols-[repeat(auto-fit,minmax(300px,1fr))] gap-5">

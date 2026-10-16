@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ChevronRight, Plus, Search, Users, Wallet, HeartHandshake, Box } from 'lucide-react'
+import { ChevronRight, Plus, Search, Sparkles, Users, Wallet, HeartHandshake, Box } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { canBuild, useData, useSession } from '@/store/store'
@@ -34,6 +34,11 @@ export default function Discover() {
     .filter((p) => matches(p, q))
     .sort((a, b) => Number(b.roles.some((r) => r.name === myRole)) - Number(a.roles.some((r) => r.name === myRole)))
 
+  // "One question to start": what started it? Triggers from processes you're in come first.
+  const starts = processes.filter((p) => p.status === 'published' && p.triggers.length)
+    .sort((a, b) => Number(b.roles.some((r) => r.name === myRole)) - Number(a.roles.some((r) => r.name === myRole)))
+    .flatMap((p) => p.triggers.slice(0, 4).map((t) => ({ p, t }))).slice(0, 8)
+
   return (
     <div className="min-h-full">
       <AppHeader>
@@ -54,6 +59,24 @@ export default function Discover() {
             <Button type="submit" size="lg">Search</Button>
           </form>
         </section>
+
+        {starts.length > 0 && !q && (
+          <section className="flex flex-col gap-3 rounded-[28px] bg-white p-6 shadow-[0_2px_4px_rgba(21,26,37,.04)]">
+            <h2 className="m-0 flex items-center gap-2 text-xl font-extrabold"><Sparkles size={20} className="text-primary" aria-hidden />Not sure where to start? What's happened?</h2>
+            <p className="m-0 text-sm text-on-surface-variant">Pick the one that fits. We'll open the right process and show just your part as {myRole}.</p>
+            <div className="flex flex-wrap gap-2">
+              {starts.map(({ p, t }) => {
+                const r = p.roles.find((x) => x.name === myRole)
+                return (
+                  <button key={p.id + t} onClick={() => nav(`${procPath(p)}${r ? `?as=${r.id}` : ''}`)}
+                    className="flex cursor-pointer flex-col items-start gap-0.5 rounded-2xl border border-outline-variant bg-white px-4 py-2.5 text-left hover:border-primary hover:bg-primary-container/40">
+                    <span className="text-sm font-bold">{t}</span><span className="text-xs text-on-surface-variant">→ {displayName(p)}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         <section className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">

@@ -13,7 +13,7 @@ import { INPUT_BUDGET, KEEP_MESSAGES, testGroq } from '@/ai/groq'
 import { cn } from '@/lib/utils'
 
 const MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
-type Tab = 'ai' | 'people' | 'processes' | 'library'
+type Tab = 'ai' | 'people' | 'processes' | 'library' | 'glossary'
 
 export default function Admin() {
   const { persona } = useSession()
@@ -29,7 +29,7 @@ export default function Admin() {
       <AppHeader />
       <main className="mx-auto flex max-w-[1240px] flex-wrap items-start gap-6 px-4 pb-16 pt-4 sm:px-8">
         <nav aria-label="Admin" className="flex w-full max-w-[260px] flex-col gap-1 sm:w-auto sm:flex-[1_1_220px]">
-          {([['ai', 'AI assistant'], ['people', 'People & access'], ['processes', 'Processes'], ['library', 'Resource library']] as [Tab, string][]).map(([id, label]) => (
+          {([['ai', 'AI assistant'], ['people', 'People & access'], ['processes', 'Processes'], ['library', 'Resource library'], ['glossary', 'Plain-language words']] as [Tab, string][]).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className={cn('h-12 cursor-pointer rounded-full border-0 px-4 text-left text-sm font-bold', tab === id ? 'bg-primary-container text-on-primary-container' : 'bg-transparent text-on-surface-variant hover:bg-surface-mid')}>{label}</button>
           ))}
         </nav>
@@ -38,6 +38,7 @@ export default function Admin() {
           {tab === 'people' && <People />}
           {tab === 'processes' && <Processes />}
           {tab === 'library' && <Library />}
+          {tab === 'glossary' && <Glossary />}
         </div>
       </main>
     </div>
@@ -166,6 +167,37 @@ function Processes() {
         ))}
       </div>
       <div className="self-start"><ConfirmButton label="Reset to starter processes" question="Replace everything with the five starter processes?" confirmLabel="Reset" icon={<RotateCcw size={16} />} onConfirm={() => { resetToStarter(); setNote('Back to the five starter processes.') }} /></div>
+    </Card>
+  )
+}
+
+function Glossary() {
+  const { glossary, setGlossary } = useData()
+  const [nt, setNt] = useState({ term: '', meaning: '' })
+  const add = () => {
+    if (!nt.term.trim() || !nt.meaning.trim()) return
+    setGlossary([...glossary.filter((g) => g.term.toLowerCase() !== nt.term.trim().toLowerCase()), { term: nt.term.trim(), meaning: nt.meaning.trim() }])
+    setNt({ term: '', meaning: '' })
+  }
+  return (
+    <Card className="flex flex-col gap-4 rounded-[28px] p-7">
+      <h1 className="m-0 text-2xl font-extrabold">Plain-language words</h1>
+      <p className="m-0 text-[13px] text-on-surface-variant">Wherever one of these words appears in a process, it is underlined with dots. Hover or tap it to see what it means in everyday words.</p>
+      <form onSubmit={(e) => { e.preventDefault(); add() }} className="grid grid-cols-[minmax(140px,200px)_1fr_auto] gap-2 rounded-[20px] bg-surface-low p-3 max-sm:grid-cols-1">
+        <input className={inputCls} placeholder="Word or acronym" value={nt.term} onChange={(e) => setNt({ ...nt, term: e.target.value })} aria-label="Word" />
+        <input className={inputCls} placeholder="What it means, in plain words" value={nt.meaning} onChange={(e) => setNt({ ...nt, meaning: e.target.value })} aria-label="Meaning" />
+        <Button type="submit" disabled={!nt.term.trim() || !nt.meaning.trim()}><Plus size={16} />Add</Button>
+      </form>
+      <div className="flex flex-col">
+        {[...glossary].sort((a, b) => a.term.localeCompare(b.term)).map((g) => (
+          <div key={g.term} className="flex items-center gap-3 border-b border-outline-variant py-2 last:border-0">
+            <b className="w-[140px] flex-none text-sm">{g.term}</b>
+            <input className={cn(inputCls, 'flex-1')} defaultValue={g.meaning} aria-label={`Meaning of ${g.term}`}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== g.meaning) setGlossary(glossary.map((x) => x.term === g.term ? { ...x, meaning: v } : x)) }} />
+            <Button variant="danger" size="icon" aria-label={`Remove ${g.term}`} onClick={() => setGlossary(glossary.filter((x) => x.term !== g.term))}><Trash2 size={16} /></Button>
+          </div>
+        ))}
+      </div>
     </Card>
   )
 }

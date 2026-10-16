@@ -3,6 +3,7 @@ import { persist, createJSONStorage, type StateStorage } from 'zustand/middlewar
 import { get, set, del } from 'idb-keyval'
 import { SEED } from '@/data/seed'
 import { SEED_LIBRARY } from '@/data/library'
+import { SEED_GLOSSARY, type Term } from '@/data/glossary'
 import { autoAssign } from '@/lib/resources'
 import type { LibraryItem, Persona, Process } from '@/lib/types'
 
@@ -19,6 +20,8 @@ interface DataState {
   processes: Process[]
   people: Person[]
   library: LibraryItem[]
+  glossary: Term[]
+  setGlossary: (g: Term[]) => void
   addLibraryItems: (items: LibraryItem[]) => void
   updateLibraryItem: (id: string, patch: Partial<LibraryItem>) => void
   removeLibraryItem: (id: string) => void
@@ -44,7 +47,9 @@ export const useData = create<DataState>()(
       processes: SEED,
       people: START_PEOPLE,
       library: SEED_LIBRARY,
+      glossary: SEED_GLOSSARY,
       hydrated: false,
+      setGlossary: (glossary) => setS({ glossary }),
       addLibraryItems: (items) => setS((s) => ({ library: [...s.library, ...items.filter((it) => !s.library.some((x) => x.id === it.id || x.title.toLowerCase() === it.title.toLowerCase()))] })),
       updateLibraryItem: (id, patch) => setS((s) => ({ library: s.library.map((x) => x.id === id ? { ...x, ...patch } : x) })),
       removeLibraryItem: (id) => setS((s) => ({
@@ -71,13 +76,14 @@ export const useData = create<DataState>()(
     }),
     {
       name: 'process-hub-data',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => idbStorage),
-      partialize: (s) => ({ processes: s.processes, people: s.people, library: s.library }),
+      partialize: (s) => ({ processes: s.processes, people: s.people, library: s.library, glossary: s.glossary }),
       // v2 adds the shared resource library: untouched starter processes get the new version,
       // everything else gets library items assigned automatically
       migrate: (old, version) => {
-        const st = (old ?? {}) as { processes?: Process[]; people?: Person[]; library?: LibraryItem[] }
+        const st = (old ?? {}) as { processes?: Process[]; people?: Person[]; library?: LibraryItem[]; glossary?: Term[] }
+        if (version < 4 && !st.glossary) st.glossary = SEED_GLOSSARY
         // v3: starter processes and people take the placeholder names from the current starter data
         if (version < 3) {
           if (st.processes) st.processes = st.processes.map((p) => {

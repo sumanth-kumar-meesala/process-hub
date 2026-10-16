@@ -66,3 +66,18 @@ body {
 /* React Flow tweaks */
 .react-flow__handle { width: 10px; height: 10px; background: #1d4ed8; border: 2px solid #fff; opacity: 0; transition: opacity .15s; }
 .react-flow__node:hover .react-flow__handle, .react-flow__node.selected .react-flow__handle, .react-flow__handle.connectingfrom, .react-flow__handle.connectingto { opacity: 1; }
+
+/* Plain-language tooltips */
+.term { position: relative; border-bottom: 1.5px dotted currentColor; cursor: help; outline: none; }
+.term-tip {
+  position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%);
+  width: max-content; max-width: 240px; padding: 8px 10px; border-radius: 10px;
+  background: #151a25; color: #fff; font-size: 12.5px; font-weight: 500; line-height: 1.4; text-transform: none; letter-spacing: 0;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.25); opacity: 0; pointer-events: none; transition: opacity 0.12s; z-index: 80; white-space: normal; text-align: left;
+}
+.term:hover .term-tip, .term:focus .term-tip, .term:focus-within .term-tip { opacity: 1; }
+
+/* walk card: each new step pops in */
+@keyframes walk-pop { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+.walk-pop { animation: walk-pop .35s cubic-bezier(.2,.8,.2,1); }
+@media (prefers-reduced-motion: reduce) { .walk-pop { animation: none; } }
