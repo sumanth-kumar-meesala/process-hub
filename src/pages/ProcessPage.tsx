@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowRight, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, Flag, Minus, MousePointerClick, Pencil, Play, Plus, Trophy, Users, X, Monitor, ShieldCheck, Share2, HeartHandshake } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, Flag, Minus, MousePointerClick, Pencil, Play, Plus, Trophy, Users, X, Monitor, ShieldCheck, Share2, HeartHandshake, Bot, Plug, Undo2 } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { Card, Tag } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
 import Islands3D from '@/three/Islands3D'
 import { canEdit, useData, useSession } from '@/store/store'
-import { allSystems, stageRoles, stepCount } from '@/lib/derive'
-import { tint, type Process } from '@/lib/types'
+import { allSystems, roleKind, stageRoles, stepCount } from '@/lib/derive'
+import { catOf, processResources, stageResources, stepResources } from '@/lib/resources'
+import { tint, type LibraryItem, type Process } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 type View = 'overview' | 'role' | 'owner'
@@ -154,11 +155,29 @@ const RoleChip = ({ on, color, name, onClick }: { on: boolean; color: string; na
   </button>
 )
 
+/** Opens a library item: its link, the Process Hub process it stands for, or nothing yet. */
+function ResourceLink({ it, className, children }: { it: LibraryItem; className: string; children: React.ReactNode }) {
+  const processes = useData((st) => st.processes)
+  if (it.category === 'process') {
+    const target = processes.find((p) => p.id === it.processId || p.title.toLowerCase() === it.title.toLowerCase())
+    if (target) return <Link to={`/process/${target.id}`} className={className}>{children}</Link>
+  }
+  if (it.url) return <a href={it.url} target="_blank" rel="noreferrer" className={className}>{children}</a>
+  return <a href="#" onClick={(e) => e.preventDefault()} title="No link added yet" className={className}>{children}</a>
+}
+
 function StagePanel({ proc, k, onClose, onNext }: { proc: Process; k: number; onClose: () => void; onNext: () => void }) {
+  const library = useData((st) => st.library)
   const s = proc.stages[k]
+  const needs = stageResources(proc, s.id, library)
   const roles = stageRoles(proc, s)
   const nextS = proc.stages[k + 1]
   const steps = proc.steps.filter((x) => x.stageId === s.id && (x.kind === 'step' || x.kind === 'decision'))
+  const checks = steps.filter((x) => x.kind === 'decision').map((d) => {
+    const e = proc.edges.find((e) => e.from === d.id && /^no$/i.test(e.label ?? ''))
+    const no = e ? proc.steps.find((x) => x.id === e.to) : undefined
+    return { id: d.id, label: d.label, no, noStage: no ? proc.stages.findIndex((st) => st.id === no.stageId) : -1 }
+  })
   return (
     <aside className="glass absolute left-2 top-0 z-[40] flex max-h-full w-[340px] max-w-[calc(100%-16px)] flex-col overflow-hidden rounded-[28px] shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.22)]" aria-label={`Stage ${k + 1} details`}>
       <div className="relative flex flex-col gap-3 px-5 pb-4 pt-5" style={{ background: tint(s.color, 0.14) }}>
@@ -173,22 +192,59 @@ function StagePanel({ proc, k, onClose, onNext }: { proc: Process; k: number; on
         <p className="m-0 text-sm leading-relaxed text-on-surface-variant">{s.text}</p>
         {steps.length > 0 && (
           <div className="flex flex-col gap-1.5"><span className="lbl">What happens</span>
-            {steps.map((st) => <div key={st.id} className="flex items-center gap-2 text-sm"><span className="h-1.5 w-1.5 rounded-full" style={{ background: s.color }} />{st.label}<span className="text-xs text-on-surface-variant">· {proc.roles.find((r) => r.id === st.roleId)?.name}</span></div>)}
+            {steps.map((st) => (
+              <div key={st.id} className="flex flex-col gap-1">
+                <div className="flex items-center gap-2 text-sm"><span className="h-1.5 w-1.5 flex-none rounded-full" style={{ background: s.color }} />{st.label}<span className="text-xs text-on-surface-variant">· {proc.roles.find((r) => r.id === st.roleId)?.name}</span></div>
+                {stepResources(st, library).length > 0 && (
+                  <div className="ml-3.5 flex flex-wrap gap-1">{stepResources(st, library).map((it) => (
+                    <span key={it.id} className="inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-semibold" style={{ background: tint(catOf(it.category).color, 0.12), color: '#151A25' }}>
+                      <span className="h-1.5 w-1.5 rounded-full" style={{ background: catOf(it.category).color }} />{it.title}</span>
+                  ))}</div>
+                )}
+              </div>
+            ))}
           </div>
         )}
         {roles.length > 0 && (
           <div className="flex flex-col gap-2"><span className="lbl">Who does it</span>
-            {roles.map((r) => (
+            {roles.map((r) => roleKind(r) === 'agent' ? (
+              <div key={r.id} className="flex flex-col gap-2 rounded-2xl p-3" style={{ background: tint(r.color, 0.1) }}>
+                <div className="flex items-center gap-2.5 text-sm font-bold">
+                  <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[10px] text-white" style={{ background: r.color }}><Bot size={17} /></span>
+                  <span className="flex flex-col leading-tight">{r.name}<span className="text-xs font-semibold text-on-surface-variant">AI agent — works automatically</span></span>
+                </div>
+                {r.tools?.length ? (
+                  <div className="flex flex-col gap-1.5"><span className="text-xs font-bold text-on-surface-variant">Tools it can use</span>
+                    <div className="flex flex-wrap gap-1.5">{r.tools.map((t) => <span key={t} className="inline-flex h-7 items-center gap-1.5 rounded-lg border bg-white px-2 text-xs font-semibold" style={{ borderColor: r.color }}><Plug size={13} style={{ color: r.color }} />{t}</span>)}</div>
+                  </div>
+                ) : <span className="text-xs text-on-surface-variant">No tools listed yet</span>}
+              </div>
+            ) : (
               <div key={r.id} className="flex items-center gap-2.5 text-sm font-bold">
                 <span className="flex h-[30px] w-[30px] items-end justify-center overflow-hidden rounded-full" style={{ background: r.color }}><span className="mb-[9px] h-3.5 w-3.5 rounded-full bg-[#F5D0A9]" /></span>{r.name}
               </div>
             ))}
           </div>
         )}
+        {checks.length > 0 && (
+          <div className="flex flex-col gap-2"><span className="lbl">Checks here</span>
+            {checks.map((c) => (
+              <div key={c.id} className="flex flex-col gap-1 rounded-[14px] bg-[#FFF7E6] px-3 py-2.5 text-sm">
+                <span className="flex items-center gap-2 font-bold"><span className="h-3 w-3 rotate-45 rounded-[2px] bg-[#FBBF24]" />{c.label}</span>
+                {c.no && <span className="flex items-center gap-1.5 text-[13px] text-[#9A3412]"><Undo2 size={14} />If not: back to “{c.no.label}”{c.noStage !== k ? ` (stage ${c.noStage + 1})` : ''}</span>}
+              </div>
+            ))}
+          </div>
+        )}
         {s.systems.length > 0 && <div className="flex flex-col gap-2"><span className="lbl">Systems</span><div className="flex flex-wrap gap-1.5">{s.systems.map((x) => <Tag key={x} className="bg-ink text-white">{x}</Tag>)}</div></div>}
-        {s.docs.length > 0 && (
+        {(needs.length > 0 || s.docs.length > 0) && (
           <div className="flex flex-col gap-1.5"><span className="lbl">You'll need</span>
-            {s.docs.map((d) => <a key={d} href="#" onClick={(e) => e.preventDefault()} className="flex h-11 items-center gap-2.5 rounded-[14px] bg-surface-low px-3 text-sm font-semibold text-on-surface no-underline hover:bg-surface-mid"><FileText size={18} style={{ color: s.color }} /><span className="flex-1">{d}</span><ArrowUpRight size={16} className="text-on-surface-variant" /></a>)}
+            {needs.map((it) => (
+              <ResourceLink key={it.id} it={it} className="flex min-h-11 items-center gap-2.5 rounded-[14px] bg-surface-low px-3 py-1.5 text-sm font-semibold text-on-surface no-underline hover:bg-surface-mid">
+                <FileText size={18} style={{ color: catOf(it.category).color }} /><span className="flex flex-1 flex-col leading-tight">{it.title}<span className="text-[11px] font-medium text-on-surface-variant">{catOf(it.category).one}</span></span><ArrowUpRight size={16} className="text-on-surface-variant" />
+              </ResourceLink>
+            ))}
+            {s.docs.map((d) => <span key={d} className="flex h-11 items-center gap-2.5 rounded-[14px] bg-surface-low px-3 text-sm font-semibold"><FileText size={18} style={{ color: s.color }} /><span className="flex-1">{d}</span></span>)}
           </div>
         )}
         <button onClick={onNext} className="flex w-full cursor-pointer items-center gap-2.5 rounded-2xl border-0 bg-surface-low px-3.5 py-3 text-left text-sm font-semibold hover:bg-surface-mid">
@@ -202,8 +258,13 @@ function StagePanel({ proc, k, onClose, onNext }: { proc: Process; k: number; on
 
 const Check2 = () => <Check size={18} className="mt-0.5 flex-none text-secondary" strokeWidth={2.6} aria-hidden />
 
+const CAT_ICON = { form: FileText, 'client-doc': HeartHandshake, guide: Monitor, policy: ShieldCheck, process: Share2 } as const
+
 function Overview({ proc }: { proc: Process }) {
-  const icons = [FileText, HeartHandshake, Monitor, ShieldCheck, Share2]
+  const library = useData((st) => st.library)
+  // library links, or the older fixed groups for data saved before the library existed
+  const groups = processResources(proc, library).length ? processResources(proc, library)
+    : proc.resources.map((g) => ({ id: 'form' as const, title: g.title, note: g.note, color: g.color, one: '', items: g.items.map((t) => ({ it: { id: t, title: t, category: 'form' as const }, usedBy: [] as string[] })) }))
   return (
     <div className="flex flex-col gap-5">
       <Card className="flex flex-col gap-2.5 bg-secondary-container text-on-secondary-container">
@@ -227,11 +288,11 @@ function Overview({ proc }: { proc: Process }) {
         </Card>
       </div>
       <div className="flex flex-col gap-3.5">
-        <div className="flex flex-wrap items-center gap-3"><h3 className="m-0 text-xl font-extrabold">Resources</h3><span className="text-sm text-on-surface-variant">{proc.resources.reduce((a, r) => a + r.items.length, 0)} documents, guides and links</span></div>
-        {proc.resources.length === 0 ? <Card className="text-sm text-on-surface-variant">No resources added yet.</Card> : (
+        <div className="flex flex-wrap items-center gap-3"><h3 className="m-0 text-xl font-extrabold">Resources</h3><span className="text-sm text-on-surface-variant">{groups.reduce((a, g) => a + g.items.length, 0)} documents, guides and links — from the shared library</span></div>
+        {groups.length === 0 ? <Card className="text-sm text-on-surface-variant">No resources linked yet.</Card> : (
           <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-3.5">
-            {proc.resources.map((g, k) => {
-              const Icon = icons[k % icons.length]
+            {groups.map((g) => {
+              const Icon = CAT_ICON[g.id]
               return (
                 <div key={g.id} className="flex flex-col gap-3.5 rounded-[24px] p-5" style={{ background: tint(g.color, 0.13) }}>
                   <div className="flex items-center gap-3">
@@ -239,7 +300,12 @@ function Overview({ proc }: { proc: Process }) {
                     <div><div className="text-[15px] font-extrabold">{g.title}</div><div className="text-xs text-on-surface-variant">{g.note}</div></div>
                   </div>
                   <div className="flex flex-col gap-1.5">
-                    {g.items.map((it) => <a key={it} href="#" onClick={(e) => e.preventDefault()} className="flex h-11 items-center gap-2.5 rounded-[14px] bg-white px-3 text-sm font-semibold text-on-surface no-underline hover:shadow-md"><span className="flex-1">{it}</span><ChevronRight size={16} style={{ color: g.color }} /></a>)}
+                    {g.items.map(({ it, usedBy }) => (
+                      <ResourceLink key={it.id} it={it} className="flex min-h-11 items-center gap-2.5 rounded-[14px] bg-white px-3 py-1.5 text-sm font-semibold text-on-surface no-underline hover:shadow-md">
+                        <span className="flex flex-1 flex-col leading-tight">{it.title}{usedBy.length > 0 && <span className="text-[11px] font-medium text-on-surface-variant">Used in: {usedBy.slice(0, 2).join(', ')}{usedBy.length > 2 ? ` +${usedBy.length - 2}` : ''}</span>}</span>
+                        <ChevronRight size={16} style={{ color: g.color }} />
+                      </ResourceLink>
+                    ))}
                   </div>
                 </div>
               )
@@ -258,7 +324,8 @@ function RoleView({ proc, initial }: { proc: Process; initial?: string }) {
   const stages = proc.stages.map((s, k) => ({ s, k })).filter(({ s }) => stageRoles(proc, s).some((r) => r.id === rid))
   const steps = proc.steps.filter((s) => s.roleId === rid && (s.kind === 'step' || s.kind === 'decision'))
   const systems = det?.systems ?? [...new Set(stages.flatMap(({ s }) => s.systems))]
-  const docs = det?.documents ?? [...new Set(stages.flatMap(({ s }) => s.docs))]
+  const library = useData((st) => st.library)
+  const docs = det?.documents ?? [...new Set([...steps.flatMap((x) => stepResources(x, library).map((it) => it.title)), ...stages.flatMap(({ s }) => s.docs)])]
   if (!role) return <Card>No roles yet.</Card>
   return (
     <div className="flex flex-col gap-5">

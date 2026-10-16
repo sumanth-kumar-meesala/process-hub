@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Material 3 colour roles (seeded from Scope blue), exposed as Tailwind colours */
+/* Material 3 colour roles (seeded from brand blue), exposed as Tailwind colours */
 @theme {
   --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
 

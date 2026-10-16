@@ -1,7 +1,7 @@
 import type { Process } from '@/lib/types'
 
 /**
- * Starter processes. Only content taken from the Scope / KPMG mockups is used.
+ * Starter processes. Only content taken from the original mockups is used.
  * FS25 is complete; the other four only had partial information in the mockups,
  * so they are flagged `needsCompleting` for their owners to finish in the Builder.
  */
@@ -12,10 +12,10 @@ const fs25: Process = {
   code: 'FS25',
   title: 'Client Specific Training',
   area: 'Client & Community',
-  summary: "Makes sure workers get the training they need to safely support each client — in line with the client's support needs, their plan and Scope policies.",
+  summary: "Makes sure workers get the training they need to safely support each client — in line with the client's support needs, their plan and our policies.",
   nutshell: "When a client's situation changes — they're new, they move house, their plan changes or there's an incident — the House Supervisor works out what training their workers need. L&D arranges it, a training provider delivers it, and everything is recorded in Lumary DC. It's done when workers are trained and the evidence is on file.",
-  owner: 'Erin Hannah',
-  executiveOwner: 'Evan Westgarth',
+  owner: 'Priya Sharma',
+  executiveOwner: 'Daniel Brooks',
   reviewLast: '14 Aug 2024',
   reviewNext: '14 Aug 2026',
   status: 'published',
@@ -32,23 +32,23 @@ const fs25: Process = {
     { id: 'dsw', name: 'Support Worker', color: '#DB2777' },
   ],
   stages: [
-    { id: 's1', title: 'Work out what training this client needs', short: 'Identify needs', place: "the client's home", text: "Look at the client's information and support plan, and decide what workers need to learn to support them safely.", color: '#2563EB', systems: ['Lumary DC', 'Client Records'], docs: ['Client Support Plan', 'Training Request Form'], roleIds: [], scene: 'home' },
-    { id: 's2', title: 'Plan the training pathway and get it approved', short: 'Plan & approve', place: 'the Scope office', text: 'Confirm exactly which training is needed and get approval before anything is booked.', color: '#DB2777', systems: ['Lumary DC', 'SharePoint'], docs: ['Training Pathway Approval'], roleIds: [], scene: 'office' },
-    { id: 's3', title: 'Book the sessions, materials and trainer', short: 'Arrange training', place: 'the L&D team', text: 'L&D organises the sessions, the materials and a training provider, and sends invites to the workers.', color: '#16A34A', systems: ['Outlook', 'Teams'], docs: ['Session Plan Template'], roleIds: ['tp'], scene: 'calendar' },
-    { id: 's4', title: 'Deliver the training and check skills', short: 'Deliver & assess', place: 'the training session', text: 'The training provider runs the session and confirms each support worker can do what is needed.', color: '#EA580C', systems: ['Totara LMS', 'Lumary DC'], docs: ['Attendance Sheet', 'Competency Form'], roleIds: [], scene: 'classroom' },
-    { id: 's5', title: 'Record it and keep an eye on it', short: 'Record & monitor', place: 'Lumary DC', text: "Update the client record, keep the evidence, and review again whenever the client's needs change.", color: '#7C3AED', systems: ['Totara LMS', 'Lumary DC'], docs: ['Client Training Record', 'Evidence Checklist'], roleIds: [], scene: 'records' },
+    { id: 's1', title: 'Work out what training this client needs', short: 'Identify needs', place: "the client's home", text: "Look at the client's information and support plan, and decide what workers need to learn to support them safely.", color: '#2563EB', systems: ['Lumary DC', 'Client Records'], docs: [], roleIds: [], scene: 'home' },
+    { id: 's2', title: 'Plan the training pathway and get it approved', short: 'Plan & approve', place: 'the head office', text: 'Confirm exactly which training is needed and get approval before anything is booked.', color: '#DB2777', systems: ['Lumary DC', 'SharePoint'], docs: [], roleIds: [], scene: 'office' },
+    { id: 's3', title: 'Book the sessions, materials and trainer', short: 'Arrange training', place: 'the L&D team', text: 'L&D organises the sessions, the materials and a training provider, and sends invites to the workers.', color: '#16A34A', systems: ['Outlook', 'Teams'], docs: [], roleIds: ['tp'], scene: 'calendar' },
+    { id: 's4', title: 'Deliver the training and check skills', short: 'Deliver & assess', place: 'the training session', text: 'The training provider runs the session and confirms each support worker can do what is needed.', color: '#EA580C', systems: ['Totara LMS', 'Lumary DC'], docs: [], roleIds: [], scene: 'classroom' },
+    { id: 's5', title: 'Record it and keep an eye on it', short: 'Record & monitor', place: 'Lumary DC', text: "Update the client record, keep the evidence, and review again whenever the client's needs change.", color: '#7C3AED', systems: ['Totara LMS', 'Lumary DC'], docs: [], roleIds: [], scene: 'records' },
   ],
   steps: [
     { id: 'start', kind: 'start', label: 'Something changes for the client', roleId: 'intake', stageId: 's1' },
-    { id: 'a1', kind: 'step', label: 'Review client information', roleId: 'intake', stageId: 's1' },
-    { id: 'a2', kind: 'step', label: 'Identify training needs', roleId: 'hs', stageId: 's1' },
-    { id: 'a3', kind: 'step', label: 'Plan training pathway', roleId: 'hs', stageId: 's2' },
-    { id: 'd1', kind: 'decision', label: 'Approved?', roleId: 'sc', stageId: 's2' },
-    { id: 'a4', kind: 'step', label: 'Book sessions & trainer', roleId: 'ld', stageId: 's3' },
-    { id: 'a5', kind: 'step', label: 'Deliver & assess skills', roleId: 'tp', stageId: 's4' },
-    { id: 'a6', kind: 'step', label: 'Complete the training', roleId: 'dsw', stageId: 's4' },
-    { id: 'a7', kind: 'step', label: 'Record completion', roleId: 'ld', stageId: 's5' },
-    { id: 'a8', kind: 'step', label: 'Monitor compliance', roleId: 'hs', stageId: 's5' },
+    { id: 'a1', kind: 'step', label: 'Review client information', roleId: 'intake', stageId: 's1' , resourceIds: ['lib-doc-psp', 'lib-guide-lumary-record'] },
+    { id: 'a2', kind: 'step', label: 'Identify training needs', roleId: 'hs', stageId: 's1' , resourceIds: ['lib-form-training-request', 'lib-policy-cst'] },
+    { id: 'a3', kind: 'step', label: 'Plan training pathway', roleId: 'hs', stageId: 's2' , resourceIds: ['lib-form-pathway-approval'] },
+    { id: 'd1', kind: 'decision', label: 'Approved?', roleId: 'sc', stageId: 's2' , resourceIds: ['lib-form-pathway-approval', 'lib-policy-worker-training'] },
+    { id: 'a4', kind: 'step', label: 'Book sessions & trainer', roleId: 'ld', stageId: 's3' , resourceIds: ['lib-form-session-plan', 'lib-guide-teams-schedule'] },
+    { id: 'a5', kind: 'step', label: 'Deliver & assess skills', roleId: 'tp', stageId: 's4' , resourceIds: ['lib-guide-totara-assign', 'lib-policy-worker-training'] },
+    { id: 'a6', kind: 'step', label: 'Complete the training', roleId: 'dsw', stageId: 's4' , resourceIds: ['lib-doc-evidence-checklist'] },
+    { id: 'a7', kind: 'step', label: 'Record completion', roleId: 'ld', stageId: 's5' , resourceIds: ['lib-doc-training-record', 'lib-doc-evidence-checklist', 'lib-guide-lumary-record'] },
+    { id: 'a8', kind: 'step', label: 'Monitor compliance', roleId: 'hs', stageId: 's5' , resourceIds: ['lib-policy-ndis-standards', 'lib-policy-cst'] },
     { id: 'end', kind: 'end', label: 'Workers trained, evidence on file', roleId: 'hs', stageId: 's5' },
   ],
   edges: [
@@ -64,13 +64,8 @@ const fs25: Process = {
     { id: 'e10', from: 'a7', to: 'a8' },
     { id: 'e11', from: 'a8', to: 'end' },
   ],
-  resources: [
-    { id: 'r1', title: 'Forms & templates', note: '3 to fill in', color: '#2563EB', items: ['Training Request Form', 'Training Pathway Approval', 'Session Plan Template'] },
-    { id: 'r2', title: 'Client documents', note: 'Kept in Lumary DC', color: '#DB2777', items: ['Client Support Plan (PSP)', 'Client Training Record', 'Training Evidence Checklist'] },
-    { id: 'r3', title: 'How-to guides', note: 'Step-by-step for systems', color: '#16A34A', items: ['Lumary DC — client record', 'Totara — assign training', 'Teams — schedule sessions'] },
-    { id: 'r4', title: 'Policies', note: 'The rules behind it', color: '#EA580C', items: ['Client Specific Training Policy', 'Worker Training Policy', 'NDIS Practice Standards'] },
-    { id: 'r5', title: 'Related processes', note: 'Linked work', color: '#7C3AED', items: ['New Client Onboarding', 'Incident Management', 'Plan Review'] },
-  ],
+  resources: [],
+  linkedIds: ['lib-policy-cst', 'lib-policy-worker-training', 'lib-policy-ndis-standards', 'lib-proc-new-client', 'lib-proc-incident', 'lib-proc-plan-review'],
   roleDetails: [
     {
       roleId: 'hs',

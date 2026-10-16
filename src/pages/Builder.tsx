@@ -6,21 +6,39 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
-  ArrowLeft, Box, CircleDot, Diamond, Eye, FileText, Flag, Maximize, Minus, Monitor, Plus, RotateCcw, Send, Sparkles, Trash2, Trophy, User, Users, LayoutGrid, ChevronLeft, ChevronRight, Check,
+  ArrowLeft, Box, X, Bot, CircleDot, Diamond, Eye, FileText, Flag, Maximize, Minus, Monitor, Plus, RotateCcw, Send, Sparkles, Trash2, Trophy, User, Users, LayoutGrid, ChevronLeft, ChevronRight, Check,
 } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
+import { ConfirmButton } from '@/components/ui/confirm'
 import Islands3D from '@/three/Islands3D'
 import { canBuild, canEdit, personaUser, useData, useSession } from '@/store/store'
-import { ROLE_COLORS, STAGE_COLORS, tint, uid, type Process, type SceneKind, type StepKind } from '@/lib/types'
-import { displayName, stepCount } from '@/lib/derive'
+import { ROLE_COLORS, STAGE_COLORS, tint, uid, type LibraryItem, type Process, type ResourceCategory, type RoleKind, type SceneKind, type StepKind } from '@/lib/types'
+import { CATEGORIES, autoAssign, catOf, suggestFor, suggestLinked } from '@/lib/resources'
+import { displayName, roleKind, stepCount } from '@/lib/derive'
 import { applyOps, summariseNotes, type Op } from '@/ai/ops'
+import { specToProcess } from '@/ai/build'
 import { askGroq, foldHistory, buildMessages, INPUT_BUDGET, type ChatMsg } from '@/ai/groq'
 import { cn } from '@/lib/utils'
 
 /* ---------- layout grid: columns = stages, rows (lanes) = roles ---------- */
 const LBL = 150, COL = 250, HDR = 56, LANE = 112, NW = 156, NH = 50, CW = 34
 const widthOf = (k: StepKind) => (k === 'start' || k === 'end' ? CW : NW)
+/** Each stage column is wide enough for its busiest lane, so steps sharing a cell sit side by side. */
+function columns(p: Process) {
+  const ws = p.stages.map((st) => {
+    let max = 0
+    p.roles.forEach((r) => {
+      const items = p.steps.filter((x) => x.stageId === st.id && x.roleId === r.id)
+      const w = items.reduce((a, x) => a + widthOf(x.kind) + 14, 0)
+      max = Math.max(max, w)
+    })
+    return Math.max(COL, max + 24)
+  })
+  const xs: number[] = []; let acc = LBL
+  ws.forEach((w) => { xs.push(acc); acc += w })
+  return { xs, ws, total: acc }
+}
 
 /* ===================================================================== */
 export default function Builder() {
@@ -52,6 +70,7 @@ function BuilderHome() {
   const { persona } = useSession()
   const processes = useData((s) => s.processes)
   const upsert = useData((s) => s.upsert)
+  const remove = useData((s) => s.remove)
   const nav = useNavigate()
   const mine = processes.filter((p) => canEdit(persona, p))
   const create = () => {
@@ -71,7 +90,7 @@ function BuilderHome() {
           <h1 className="m-0 flex-1 text-3xl font-extrabold">Builder</h1>
           <Button onClick={create}><Plus size={16} />New process</Button>
         </div>
-        <p className="m-0 text-on-surface-variant">{persona === 'admin' ? 'As Global Admin you can edit every process.' : 'Processes you own. Start a new one, or describe it to the AI assistant inside.'}</p>
+        <p className="m-0 text-on-surface-variant">{persona === 'admin' ? 'As Global Admin you can edit every process.' : 'Processes you own. Start a new one, or describe it to the AI assistant inside.'} Deleted starter processes can be brought back from Admin → Processes → Reset.</p>
         <div className="flex flex-col gap-2.5">
           {mine.length === 0 && <p className="rounded-[20px] bg-white p-6 text-on-surface-variant">You don't own any processes yet.</p>}
           {mine.map((p) => (
@@ -79,6 +98,7 @@ function BuilderHome() {
               <LayoutGrid size={22} className="text-primary" aria-hidden />
               <span className="flex flex-1 flex-col"><b>{displayName(p)}</b><span className="text-[13px] text-on-surface-variant">{p.owner} · {p.stages.length} stages · {stepCount(p)} steps</span></span>
               <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-bold', p.status === 'published' ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-mid')}>{p.status === 'published' ? 'Published' : 'Draft'}</span>
+              <ConfirmButton iconOnly label={`Delete ${p.title}`} question="Delete this process?" confirmLabel="Delete" icon={<Trash2 size={17} />} onConfirm={() => remove(p.id)} />
             </Link>
           ))}
         </div>
@@ -89,7 +109,7 @@ function BuilderHome() {
 
 /* ---------- custom nodes ---------- */
 type StepData = { label: string; kind: StepKind; color: string; stageNo: number; suggested: boolean; selected?: boolean }
-type GridData = { stages: Process['stages']; roles: Process['roles']; w: number; h: number; onStage: (id: string) => void; selStage?: string }
+type GridData = { stages: Process['stages']; roles: Process['roles']; w: number; h: number; xs: number[]; ws: number[]; onStage: (id: string) => void; selStage?: string }
 
 const handles = (
   <>
@@ -131,14 +151,17 @@ function GridNode({ data }: NodeProps<Node<GridData>>) {
   return (
     <div style={{ width: data.w, height: data.h, pointerEvents: 'none' }} className="relative">
       {data.stages.map((s, i) => (
-        <div key={s.id} className="absolute top-0" style={{ left: LBL + i * COL, width: COL, height: data.h, background: tint(s.color, 0.06) }}>
+        <div key={s.id} className="absolute top-0" style={{ left: data.xs[i], width: data.ws[i], height: data.h, background: tint(s.color, 0.06) }}>
           <button onClick={() => data.onStage(s.id)} style={{ pointerEvents: 'auto', background: s.color, boxShadow: data.selStage === s.id ? '0 0 0 3px #fff, 0 0 0 5px ' + s.color : undefined }}
             className="nodrag absolute left-2 right-2 top-2.5 h-8 cursor-pointer truncate rounded-full border-0 px-3 text-xs font-extrabold text-white">{i + 1} · {s.short}</button>
         </div>
       ))}
       {data.roles.map((r, j) => (
         <div key={r.id} className="absolute left-0 flex items-center gap-2 border-t border-outline-variant pl-3 text-xs font-bold" style={{ top: HDR + j * LANE, width: data.w, height: LANE }}>
-          <span className="h-3 w-3 flex-none rounded-full" style={{ background: r.color }} /><span className="w-[120px] leading-tight">{r.name}</span>
+          {roleKind(r) === 'agent'
+            ? <span className="flex h-5 w-5 flex-none items-center justify-center rounded-md text-white" style={{ background: r.color }}><Bot size={13} /></span>
+            : <span className="h-3 w-3 flex-none rounded-full" style={{ background: r.color }} />}
+          <span className="w-[120px] leading-tight">{r.name}{roleKind(r) === 'agent' && r.tools?.length ? <span className="block text-[10px] font-semibold text-on-surface-variant">{r.tools.length} tool{r.tools.length > 1 ? 's' : ''}</span> : null}</span>
         </div>
       ))}
     </div>
@@ -148,24 +171,25 @@ const nodeTypes = { step: StepNode, grid: GridNode }
 
 /* ---------- helpers ---------- */
 const cellOf = (p: Process, x: number, y: number) => {
-  const si = Math.max(0, Math.min(p.stages.length - 1, Math.floor((x - LBL) / COL)))
+  const { xs } = columns(p)
+  let si = 0; xs.forEach((cx, i) => { if (x >= cx) si = i })
   const ri = Math.max(0, Math.min(p.roles.length - 1, Math.floor((y - HDR) / LANE)))
   return { stage: p.stages[si], role: p.roles[ri] }
 }
 
 function computeNodes(p: Process, added: Set<string>, selStage?: string, onStage?: (id: string) => void): Node[] {
-  const w = LBL + Math.max(1, p.stages.length) * COL + 40, h = HDR + Math.max(1, p.roles.length) * LANE
-  const grid: Node<GridData> = { id: '__grid', type: 'grid', position: { x: 0, y: 0 }, data: { stages: p.stages, roles: p.roles, w, h, onStage: onStage ?? (() => {}), selStage }, draggable: false, selectable: false, zIndex: -1, style: { pointerEvents: 'none' } }
+  const { xs, ws, total } = columns(p)
+  const w = Math.max(total, LBL + COL) + 40, h = HDR + Math.max(1, p.roles.length) * LANE
+  const grid: Node<GridData> = { id: '__grid', type: 'grid', position: { x: 0, y: 0 }, data: { stages: p.stages, roles: p.roles, w, h, xs, ws, onStage: onStage ?? (() => {}), selStage }, draggable: false, selectable: false, zIndex: -1, style: { pointerEvents: 'none' } }
   // items sharing a cell sit side by side (start/end markers are narrow); wrap if the cell is full
-  const perCell: Record<string, { x: number; row: number }> = {}
+  const perCell: Record<string, { x: number }> = {}
   const order = [...p.steps].sort((a, b) => (a.kind === 'start' ? -1 : a.kind === 'end' ? 1 : 0) - (b.kind === 'start' ? -1 : b.kind === 'end' ? 1 : 0))
   const pos: Record<string, { x: number; y: number }> = {}
   order.forEach((s) => {
     const si = Math.max(0, p.stages.findIndex((x) => x.id === s.stageId)), ri = Math.max(0, p.roles.findIndex((x) => x.id === s.roleId))
     const key = `${si}-${ri}`, w = widthOf(s.kind)
-    const c = perCell[key] ?? { x: 14, row: 0 }
-    if (c.x + w > COL - 8 && c.x > 14) { c.x = 14; c.row++ }
-    pos[s.id] = { x: LBL + si * COL + c.x + c.row * 10, y: HDR + ri * LANE + (LANE - NH) / 2 + c.row * 16 }
+    const c = perCell[key] ?? { x: 14 }
+    pos[s.id] = { x: (xs[si] ?? LBL) + c.x, y: HDR + ri * LANE + (LANE - NH) / 2 }
     c.x += w + 14; perCell[key] = c
   })
   const steps: Node<StepData>[] = p.steps.map((s) => {
@@ -190,14 +214,20 @@ const computeEdges = (p: Process, added: Set<string>): RFEdge[] => p.edges.map((
 
 const NONE = new Set<string>()
 type Sel = { type: 'step' | 'edge' | 'stage'; id: string } | null
-type Pending = { ops: Op[]; reply: string; notes: string[]; preview: Process; added: Set<string> }
+type Pending = { ops: Op[]; reply: string; notes: string[]; preview: Process; added: Set<string>; replaces?: boolean; newItems: LibraryItem[] }
 
 /* ===================================================================== */
 function Editor({ initial }: { initial: Process }) {
   const { persona, groqKey, model } = useSession()
   const upsert = useData((s) => s.upsert)
+  const remove = useData((s) => s.remove)
+  const library = useData((s) => s.library)
+  const allProcesses = useData((s) => s.processes)
+  const addLibraryItems = useData((s) => s.addLibraryItems)
   const nav = useNavigate()
   const rf = useReactFlow()
+  const opened = useRef(initial)
+  const deleted = useRef(false)
   const [draft, setDraft] = useState<Process>(initial)
   const undoStack = useRef<Process[]>([])
   const [sel, setSel] = useState<Sel>(null)
@@ -218,7 +248,7 @@ function Editor({ initial }: { initial: Process }) {
   // auto-save to the in-browser database
   useEffect(() => {
     setSaved(false)
-    const t = setTimeout(() => { upsert(draft); setSaved(true) }, 350)
+    const t = setTimeout(() => { if (!deleted.current) { upsert(draft); setSaved(true) } }, 350)
     return () => clearTimeout(t)
   }, [draft, upsert])
 
@@ -258,9 +288,11 @@ function Editor({ initial }: { initial: Process }) {
 
   const addAt = (kind: string, x?: number, y?: number) => {
     if (pending) return
-    if (kind === 'role') return commit((d) => { d.roles.push({ id: uid('r'), name: `New role ${d.roles.length + 1}`, color: ROLE_COLORS[d.roles.length % ROLE_COLORS.length] }); return d })
+    if (kind === 'role' || kind === 'team') return commit((d) => { d.roles.push({ id: uid('r'), name: kind === 'team' ? `New team ${d.roles.length + 1}` : `New role ${d.roles.length + 1}`, color: ROLE_COLORS[d.roles.length % ROLE_COLORS.length], kind: kind === 'team' ? 'team' : 'person' }); return d })
+    if (kind === 'agent') { commit((d) => { d.roles.push({ id: uid('r'), name: 'AI agent', color: '#0D9488', kind: 'agent', tools: [] }); return d }); setTab('process'); return }
     if (kind === 'stage') return commit((d) => { const id = uid('s'); d.stages.push({ id, title: 'New stage', short: `Stage ${d.stages.length + 1}`, place: '', text: '', color: STAGE_COLORS[d.stages.length % STAGE_COLORS.length], systems: [], docs: [], roleIds: [], scene: 'auto' }); setTimeout(() => onStage(id)); return d })
-    const px = x ?? LBL + (draft.stages.findIndex((s) => s.id === selStage) >= 0 ? draft.stages.findIndex((s) => s.id === selStage) : 0) * COL + COL / 2
+    const cols = columns(draft), si0 = Math.max(0, draft.stages.findIndex((s) => s.id === selStage))
+    const px = x ?? (cols.xs[si0] ?? LBL) + 40
     const py = y ?? HDR + LANE / 2
     const { stage, role } = cellOf(draft, px, py)
     if (!stage || !role) return
@@ -292,12 +324,15 @@ function Editor({ initial }: { initial: Process }) {
     const history: ChatMsg[] = [...chat.map(({ role, content }) => ({ role, content })), { role: 'user', content: text }]
     setChat((c) => [...c, { role: 'user', content: text }])
     try {
-      const r = await askGroq({ key: groqKey, model, process: draft, history, summary })
+      const r = await askGroq({ key: groqKey, model, process: draft, history, summary, library })
       setSummary(r.summary)
-      setChat((c) => [...c, { role: 'assistant', content: r.reply }])
-      if (r.ops.length) {
-        const { next, added, notes } = applyOps(draft, r.ops)
-        setPending({ ops: r.ops, reply: r.reply, notes, preview: next, added })
+      setChat((c) => [...c, { role: 'assistant', content: r.reply + (r.truncated ? ' (My answer was cut short — say “continue” and I’ll add the rest.)' : '') }])
+      if (r.spec) {
+        const { next, added, notes, newItems } = specToProcess(draft, r.spec, library)
+        setPending({ ops: [], reply: r.reply, notes, preview: next, added, replaces: true, newItems })
+      } else if (r.ops.length) {
+        const { next, added, notes, newItems } = applyOps(draft, r.ops, library)
+        setPending({ ops: r.ops, reply: r.reply, notes, preview: next, added, newItems })
       }
     } catch (e) {
       setErr((e as Error).message || 'Something went wrong talking to Groq.')
@@ -306,7 +341,9 @@ function Editor({ initial }: { initial: Process }) {
   const applyPending = () => {
     if (!pending) return
     const label = summariseNotes(pending.notes)
+    if (pending.newItems.length) addLibraryItems(pending.newItems)
     commit(() => pending.preview)
+    setTimeout(() => rf.fitView({ padding: 0.12, duration: 400 }), 120)
     setChat((c) => { const x = [...c]; for (let i = x.length - 1; i >= 0; i--) if (x[i].role === 'assistant') { x[i] = { ...x[i], applied: label }; break } return x })
     setPending(null)
   }
@@ -315,6 +352,9 @@ function Editor({ initial }: { initial: Process }) {
     return buildMessages(draft, recent, s).tokens
   }, [chat, summary, draft])
 
+  const changed = JSON.stringify({ ...draft, updatedAt: '' }) !== JSON.stringify({ ...opened.current, updatedAt: '' })
+  const discard = () => { setPending(null); setSel(null); undoStack.current = []; setDraft(structuredClone(opened.current)) }
+  const del = () => { deleted.current = true; remove(draft.id); nav('/builder') }
   const publish = () => commit((d) => ({ ...d, status: d.status === 'published' ? 'draft' : 'published' }))
   const stageSel = sel?.type === 'stage' ? draft.stages.find((s) => s.id === sel.id) : undefined
   const stepSel = sel?.type === 'step' ? draft.steps.find((s) => s.id === sel.id) : undefined
@@ -327,7 +367,7 @@ function Editor({ initial }: { initial: Process }) {
         {draft.code && <span className="inline-flex h-7 items-center rounded-lg bg-primary px-2.5 text-[13px] font-extrabold text-white">{draft.code}</span>}
         <div className="flex flex-col leading-tight">
           <label htmlFor="pname" className="sr-only">Process name</label>
-          <input id="pname" value={draft.title} onChange={(e) => { const v = e.target.value; setDraft((d) => ({ ...d, title: v })) }} className="w-[260px] border-0 bg-transparent p-0 text-[17px] font-extrabold outline-none" />
+          <input id="pname" value={draft.title} onChange={(e) => { const v = e.target.value; setDraft((d) => ({ ...d, title: v })) }} className="w-[min(420px,40vw)] border-0 bg-transparent p-0 text-[17px] font-extrabold outline-none" />
           <span className="text-xs text-on-surface-variant">{draft.status === 'published' ? 'Published' : 'Draft'} · {saved ? 'saved in this browser' : 'saving…'}</span>
         </div>
         <div className="flex-1" />
@@ -335,7 +375,9 @@ function Editor({ initial }: { initial: Process }) {
           <span className="flex h-[26px] w-[26px] items-center justify-center rounded-full bg-secondary text-[11px] text-white">{personaUser(persona).split(' ').map((w) => w[0]).join('')}</span>
           {personaUser(persona)} · {persona === 'admin' ? 'Global admin' : 'Process owner'}
         </span>
-        <Button variant="icon" size="icon" aria-label="Undo" onClick={undo} disabled={!undoStack.current.length}><RotateCcw size={18} /></Button>
+        <Button variant="icon" size="icon" aria-label="Undo" title="Undo" onClick={undo} disabled={!undoStack.current.length}><RotateCcw size={18} /></Button>
+        <ConfirmButton variant="outlined" label="Discard changes" question="Undo everything since you opened it?" confirmLabel="Discard" icon={<X size={16} />} disabled={!changed} onConfirm={discard} />
+        <ConfirmButton label="Delete" question="Delete this process for good?" confirmLabel="Delete" icon={<Trash2 size={16} />} onConfirm={del} />
         <Button variant="outlined" size="sm" onClick={() => { upsert(draft); nav(`/process/${draft.id}`) }}><Eye size={16} />View as user</Button>
         <Button size="sm" onClick={publish}>{draft.status === 'published' ? 'Unpublish' : 'Publish'}</Button>
       </header>
@@ -344,7 +386,7 @@ function Editor({ initial }: { initial: Process }) {
         {/* palette */}
         <aside className="flex w-[216px] flex-none flex-col gap-4 overflow-y-auto border-r border-outline-variant bg-white p-4">
           <b className="text-[15px]">Elements</b>
-          <Palette title="Who" items={[['role', 'Role', User, '#F97316'], ['team', 'Team', Users, '#F97316']]} onAdd={(k) => addAt(k === 'team' ? 'role' : k)} />
+          <Palette title="Who" items={[['role', 'Role', User, '#F97316'], ['team', 'Team', Users, '#F97316'], ['agent', 'AI agent', Bot, '#0D9488']]} onAdd={(k) => addAt(k === 'team' ? 'team' : k)} />
           <Palette title="Flow" items={[['start', 'Trigger', Flag, '#2563EB'], ['stage', 'Stage', LayoutGrid, '#DB2777'], ['step', 'Step', Box, '#151A25'], ['decision', 'Decision', Diamond, '#151A25'], ['end', 'Outcome', Trophy, '#0F766E']]} onAdd={addAt} />
           <Palette title="Used along the way" items={[['system', 'System', Monitor, '#7C3AED'], ['document', 'Document', FileText, '#7C3AED']]} onAdd={addAt} />
           <p className="m-0 text-xs leading-normal text-on-surface-variant">Drag onto the canvas, or click to add. Each one becomes part of the 3D islands automatically.</p>
@@ -406,7 +448,7 @@ function Editor({ initial }: { initial: Process }) {
                 {busy && <div className="w-fit rounded-[18px] bg-surface-low px-4 py-3 text-sm text-on-surface-variant">Thinking…</div>}
                 {pending && (
                   <div className="flex flex-col gap-2.5 rounded-2xl bg-[#F2F5FF] p-3.5">
-                    <div className="text-[13px] leading-normal"><b>{summariseNotes(pending.notes)}</b><span className="text-on-surface-variant"> — shown dashed on the canvas</span></div>
+                    <div className="text-[13px] leading-normal"><b>{summariseNotes(pending.notes)}</b><span className="text-on-surface-variant">{pending.replaces ? ' — a complete new version, shown dashed. Apply replaces what was on the canvas.' : ' — shown dashed on the canvas'}</span></div>
                     <ul className="m-0 max-h-[120px] list-none overflow-y-auto p-0 text-xs text-on-surface-variant">{pending.notes.slice(0, 12).map((n, k) => <li key={k}>{n}</li>)}</ul>
                     <div className="flex gap-2"><Button className="flex-1" size="sm" onClick={applyPending}>Apply</Button><Button className="flex-1" size="sm" variant="outlined" onClick={() => setPending(null)}>Discard</Button></div>
                   </div>
@@ -423,6 +465,7 @@ function Editor({ initial }: { initial: Process }) {
                   <span className="whitespace-nowrap">Memory {(memory / 1000).toFixed(1)}k / {INPUT_BUDGET / 1000}k</span>
                   <span className="h-1.5 flex-1 rounded bg-surface-mid"><span className="block h-1.5 rounded bg-secondary" style={{ width: `${Math.min(100, (memory / INPUT_BUDGET) * 100)}%` }} /></span>
                   <span className="whitespace-nowrap">{chat.length > 6 ? 'older chat summarised' : 'full chat'}</span>
+                  {chat.length > 0 && <button onClick={() => { setChat([]); setSummary(''); setPending(null); setErr('') }} className="cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-primary">Clear chat</button>}
                 </div>
                 <form onSubmit={(e) => { e.preventDefault(); send(msg); setMsg('') }} className="flex min-h-[52px] items-center gap-2 rounded-full bg-surface-low pl-4 pr-1.5">
                   <label htmlFor="aimsg" className="sr-only">Message the AI assistant</label>
@@ -439,7 +482,14 @@ function Editor({ initial }: { initial: Process }) {
               {stepSel && (
                 <>
                   <h3 className="m-0 text-base font-extrabold">{stepSel.kind === 'decision' ? 'Decision' : stepSel.kind === 'start' ? 'Trigger' : stepSel.kind === 'end' ? 'Outcome' : 'Step'}</h3>
-                  <Field label="What happens (plain words)"><input className={inputCls} value={stepSel.label} onChange={(e) => { const v = e.target.value; setDraft((d) => ({ ...d, steps: d.steps.map((s) => s.id === stepSel.id ? { ...s, label: v } : s) })) }} /></Field>
+                  <Field label="What happens (plain words)"><input className={inputCls} value={stepSel.label} onChange={(e) => { const v = e.target.value; setDraft((d) => ({ ...d, steps: d.steps.map((s) => s.id === stepSel.id ? { ...s, label: v } : s) })) }}
+                    onBlur={() => setDraft((d) => {
+                      // first time a step is named, fetch its resources from the library
+                      const st = d.steps.find((x) => x.id === stepSel.id)
+                      if (!st || st.resourcesTouched || st.resourceIds?.length) return d
+                      const ids = suggestFor(d, st, library).map((it) => it.id)
+                      return ids.length ? { ...d, steps: d.steps.map((x) => x.id === st.id ? { ...x, resourceIds: ids } : x) } : d
+                    })} /></Field>
                   <Field label="Type"><select className={inputCls} value={stepSel.kind} onChange={(e) => commit((d) => { d.steps.find((s) => s.id === stepSel.id)!.kind = e.target.value as StepKind; return d })}>
                     <option value="step">Step</option><option value="decision">Decision (yes / no)</option><option value="start">Trigger (start)</option><option value="end">Outcome (end)</option></select></Field>
                   <Field label="Who does it"><select className={inputCls} value={stepSel.roleId} onChange={(e) => commit((d) => { d.steps.find((s) => s.id === stepSel.id)!.roleId = e.target.value; return d })}>
@@ -447,6 +497,12 @@ function Editor({ initial }: { initial: Process }) {
                   <Field label="Stage"><select className={inputCls} value={stepSel.stageId} onChange={(e) => commit((d) => { d.steps.find((s) => s.id === stepSel.id)!.stageId = e.target.value; return d })}>
                     {draft.stages.map((s, i) => <option key={s.id} value={s.id}>{i + 1} · {s.short}</option>)}</select></Field>
                   <Button variant="danger" size="sm" className="self-start" onClick={() => { removeStep(stepSel.id); setSel(null) }}><Trash2 size={15} />Delete</Button>
+                  {(stepSel.kind === 'step' || stepSel.kind === 'decision') && (
+                    <ResourcePicker title="Resources this step uses" lib={library} ids={stepSel.resourceIds ?? []}
+                      suggestions={suggestFor(draft, stepSel, library, 5)}
+                      onChange={(ids) => setDraft((d) => ({ ...d, steps: d.steps.map((x) => x.id === stepSel.id ? { ...x, resourceIds: ids, resourcesTouched: true } : x) }))}
+                      onCreate={(it) => addLibraryItems([it])} />
+                  )}
                   <p className="m-0 text-xs text-on-surface-variant">Tip: drag from the dot on a step's right edge to another step to connect them.</p>
                 </>
               )}
@@ -462,7 +518,9 @@ function Editor({ initial }: { initial: Process }) {
             </div>
           )}
 
-          {tab === 'process' && <ProcessEditor proc={draft} setDraft={setDraft} commit={commit} admin={persona === 'admin'} />}
+          {tab === 'process' && <ProcessEditor proc={draft} setDraft={setDraft} commit={commit} admin={persona === 'admin'}
+            library={library} onCreate={(it) => addLibraryItems([it])}
+            onAutoAssign={() => commit((d) => autoAssign({ ...d, steps: d.steps.map((x) => x.resourcesTouched ? x : { ...x, resourceIds: [] }) }, library, allProcesses))} />}
         </aside>
       </div>
     </div>
@@ -475,6 +533,74 @@ const areaCls = 'w-full rounded-[12px] border border-outline-variant bg-white px
 const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <label className="flex flex-col gap-1.5 text-xs font-bold text-on-surface-variant">{label}{children}</label>
 )
+
+/** Shows a step's (or the process's) library items, smart suggestions, a library search and "add new". */
+function ResourcePicker({ title, lib, ids, suggestions, onChange, onCreate, categories }: {
+  title: string; lib: LibraryItem[]; ids: string[]; suggestions: LibraryItem[]; onChange: (ids: string[]) => void; onCreate: (it: LibraryItem) => void; categories?: ResourceCategory[]
+}) {
+  const [q, setQ] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [nt, setNt] = useState({ title: '', category: (categories?.[0] ?? 'form') as ResourceCategory, url: '' })
+  const pool = categories ? lib.filter((x) => categories.includes(x.category)) : lib.filter((x) => x.category !== 'process')
+  const chosen = ids.map((id) => lib.find((x) => x.id === id)).filter(Boolean) as LibraryItem[]
+  const sugg = suggestions.filter((x) => !ids.includes(x.id))
+  const hits = q.trim() ? pool.filter((x) => !ids.includes(x.id) && `${x.title} ${(x.tags ?? []).join(' ')}`.toLowerCase().includes(q.toLowerCase())).slice(0, 6) : []
+  const Dot = ({ c }: { c: ResourceCategory }) => <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: catOf(c).color }} />
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-bold text-on-surface-variant">{title}</span>
+      {chosen.length === 0 && <span className="text-xs text-on-surface-variant">Nothing linked yet.</span>}
+      {chosen.map((it) => (
+        <div key={it.id} className="flex items-center gap-2 rounded-xl border border-outline-variant bg-white px-2.5 py-2 text-[13px]">
+          <Dot c={it.category} />
+          <span className="flex min-w-0 flex-1 flex-col leading-tight"><b className="truncate">{it.title}</b><span className="text-[11px] text-on-surface-variant">{catOf(it.category).one}{it.isNew ? ' · new' : ''}</span></span>
+          <button aria-label={`Remove ${it.title}`} onClick={() => onChange(ids.filter((x) => x !== it.id))} className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-on-surface-variant hover:bg-surface-low"><X size={14} /></button>
+        </div>
+      ))}
+      {sugg.length > 0 && (
+        <div className="flex flex-col gap-1.5"><span className="flex items-center gap-1 text-[11px] font-bold text-secondary"><Sparkles size={12} />Suggested from the library</span>
+          <div className="flex flex-wrap gap-1.5">{sugg.map((it) => (
+            <button key={it.id} onClick={() => onChange([...ids, it.id])} className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-dashed border-secondary bg-secondary-container/40 px-2.5 text-xs font-semibold text-on-secondary-container hover:bg-secondary-container">
+              <Plus size={12} />{it.title}</button>
+          ))}</div>
+        </div>
+      )}
+      <label className="sr-only" htmlFor={`rs-${title}`}>Search the library</label>
+      <input id={`rs-${title}`} className={inputCls} placeholder="Search the library…" value={q} onChange={(e) => setQ(e.target.value)} />
+      {hits.map((it) => (
+        <button key={it.id} onClick={() => { onChange([...ids, it.id]); setQ('') }} className="flex cursor-pointer items-center gap-2 rounded-xl border-0 bg-surface-low px-3 py-2 text-left text-[13px] font-semibold hover:bg-surface-mid">
+          <Dot c={it.category} /><span className="flex-1">{it.title}</span><span className="text-[11px] text-on-surface-variant">{catOf(it.category).one}</span><Plus size={14} />
+        </button>
+      ))}
+      {q.trim() && hits.length === 0 && <span className="text-xs text-on-surface-variant">Not in the library yet.</span>}
+      {!adding ? (
+        <Button variant="text" size="sm" className="self-start" onClick={() => { setAdding(true); setNt((n) => ({ ...n, title: q })) }}><Plus size={14} />Add a new resource</Button>
+      ) : (
+        <div className="flex flex-col gap-2 rounded-2xl border border-outline-variant p-2.5">
+          <input className={inputCls} placeholder="Name (e.g. Recording Consent Form)" value={nt.title} onChange={(e) => setNt({ ...nt, title: e.target.value })} aria-label="New resource name" />
+          <select className={inputCls} value={nt.category} onChange={(e) => setNt({ ...nt, category: e.target.value as ResourceCategory })} aria-label="Type">
+            {CATEGORIES.filter((c) => !categories || categories.includes(c.id)).map((c) => <option key={c.id} value={c.id}>{c.one}</option>)}
+          </select>
+          <input className={inputCls} placeholder="Link (optional)" value={nt.url} onChange={(e) => setNt({ ...nt, url: e.target.value })} aria-label="Link" />
+          <div className="flex gap-2">
+            <Button size="sm" disabled={!nt.title.trim()} onClick={() => {
+              const it: LibraryItem = { id: uid('lib'), title: nt.title.trim(), category: nt.category, url: nt.url.trim() || undefined, isNew: true }
+              onCreate(it); onChange([...ids, it.id]); setAdding(false); setQ(''); setNt({ title: '', category: nt.category, url: '' })
+            }}>Add to library &amp; link</Button>
+            <Button size="sm" variant="outlined" onClick={() => setAdding(false)}>Cancel</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Comma-separated list input: free typing, saved when you leave the field. */
+function CsvInput({ value, onChange, ...rest }: { value: string[]; onChange: (v: string[]) => void } & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'>) {
+  const [text, setText] = useState(value.join(', '))
+  useEffect(() => { setText(value.join(', ')) }, [value.join('|')])
+  return <input {...rest} className={inputCls} value={text} onChange={(e) => setText(e.target.value)} onBlur={() => onChange(text.split(',').map((x) => x.trim()).filter(Boolean))} />
+}
 
 function Palette({ title, items, onAdd }: { title: string; items: [string, string, typeof Box, string][]; onAdd: (k: string) => void }) {
   return (
@@ -497,7 +623,7 @@ type Commit = (fn: (d: Process) => Process) => void
 
 const SCENES: { id: SceneKind; label: string }[] = [
   { id: 'auto', label: 'Automatic (from the words)' }, { id: 'home', label: 'Home' }, { id: 'office', label: 'Office' }, { id: 'calendar', label: 'Calendar / booking' },
-  { id: 'classroom', label: 'Training / session' }, { id: 'records', label: 'Records / systems' }, { id: 'payment', label: 'Payment' }, { id: 'delivery', label: 'Delivery' }, { id: 'generic', label: 'Simple building' },
+  { id: 'classroom', label: 'Training / session' }, { id: 'records', label: 'Records / systems' }, { id: 'payment', label: 'Payment' }, { id: 'delivery', label: 'Delivery' }, { id: 'ai', label: 'AI / automation' }, { id: 'generic', label: 'Simple building' },
 ]
 
 function StageEditor({ proc, stageId, setDraft, commit, onDeleted }: { proc: Process; stageId: string; setDraft: SetDraft; commit: Commit; onDeleted: () => void }) {
@@ -517,10 +643,10 @@ function StageEditor({ proc, stageId, setDraft, commit, onDeleted }: { proc: Pro
       </div>
       <Field label="Short name (under the island)"><input className={inputCls} value={s.short} onChange={(e) => set({ short: e.target.value })} /></Field>
       <Field label="Title"><input className={inputCls} value={s.title} onChange={(e) => set({ title: e.target.value })} /></Field>
-      <Field label="Where it happens"><input className={inputCls} value={s.place} onChange={(e) => set({ place: e.target.value })} placeholder="e.g. the Scope office" /></Field>
+      <Field label="Where it happens"><input className={inputCls} value={s.place} onChange={(e) => set({ place: e.target.value })} placeholder="e.g. the head office" /></Field>
       <Field label="What happens, in one or two sentences"><textarea rows={3} className={areaCls} value={s.text} onChange={(e) => set({ text: e.target.value })} /></Field>
-      <Field label="Systems (comma separated)"><input className={inputCls} value={s.systems.join(', ')} onChange={(e) => set({ systems: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} /></Field>
-      <Field label="Documents you'll need (comma separated)"><input className={inputCls} value={s.docs.join(', ')} onChange={(e) => set({ docs: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} /></Field>
+      <Field label="Systems (comma separated)"><CsvInput value={s.systems} onChange={(v) => set({ systems: v })} /></Field>
+      <Field label="Documents you'll need (comma separated)"><CsvInput value={s.docs} onChange={(v) => set({ docs: v })} /></Field>
       <Field label="3D look"><select className={inputCls} value={s.scene} onChange={(e) => set({ scene: e.target.value as SceneKind })}>{SCENES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}</select></Field>
       <div className="flex flex-col gap-1.5"><span className="text-xs font-bold text-on-surface-variant">Colour</span>
         <div className="flex flex-wrap gap-2">{STAGE_COLORS.map((c) => <button key={c} aria-label={`Colour ${c}`} onClick={() => set({ color: c })} className="h-8 w-8 cursor-pointer rounded-full border-0" style={{ background: c, boxShadow: s.color === c ? `0 0 0 3px #fff, 0 0 0 5px ${c}` : undefined }} />)}</div>
@@ -531,7 +657,8 @@ function StageEditor({ proc, stageId, setDraft, commit, onDeleted }: { proc: Pro
   )
 }
 
-function ProcessEditor({ proc, setDraft, commit, admin }: { proc: Process; setDraft: SetDraft; commit: Commit; admin: boolean }) {
+function ProcessEditor({ proc, setDraft, commit, admin, library, onCreate, onAutoAssign }: { proc: Process; setDraft: SetDraft; commit: Commit; admin: boolean; library: LibraryItem[]; onCreate: (it: LibraryItem) => void; onAutoAssign: () => void }) {
+  const linked = suggestLinked(proc, library)
   const set = (patch: Partial<Process>) => setDraft((d) => ({ ...d, ...patch }))
   const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean)
   return (
@@ -550,15 +677,31 @@ function ProcessEditor({ proc, setDraft, commit, admin }: { proc: Process; setDr
         {proc.roles.map((r, k) => {
           const used = proc.steps.some((s) => s.roleId === r.id)
           return (
-            <div key={r.id} className="flex items-center gap-2">
-              <button aria-label="Change colour" onClick={() => commit((d) => { d.roles[k].color = ROLE_COLORS[(ROLE_COLORS.indexOf(r.color) + 1) % ROLE_COLORS.length]; return d })} className="h-7 w-7 flex-none cursor-pointer rounded-full border-0" style={{ background: r.color }} />
-              <input className={inputCls} value={r.name} aria-label="Role name" onChange={(e) => { const v = e.target.value; setDraft((d) => ({ ...d, roles: d.roles.map((x) => x.id === r.id ? { ...x, name: v } : x) })) }} />
-              <Button variant="icon" size="icon" aria-label="Remove role" disabled={used || proc.roles.length < 2} onClick={() => commit((d) => ({ ...d, roles: d.roles.filter((x) => x.id !== r.id) }))}><Trash2 size={16} /></Button>
+            <div key={r.id} className="flex flex-col gap-2 rounded-2xl bg-surface-low p-2.5">
+              <div className="flex items-center gap-2">
+                <button aria-label="Change colour" onClick={() => commit((d) => { d.roles[k].color = ROLE_COLORS[(ROLE_COLORS.indexOf(r.color) + 1) % ROLE_COLORS.length]; return d })} className="h-7 w-7 flex-none cursor-pointer rounded-full border-0" style={{ background: r.color }} />
+                <input className={inputCls} value={r.name} aria-label="Role name" onChange={(e) => { const v = e.target.value; setDraft((d) => ({ ...d, roles: d.roles.map((x) => x.id === r.id ? { ...x, name: v } : x) })) }} />
+                <Button variant="icon" size="icon" aria-label="Remove role" disabled={used || proc.roles.length < 2} onClick={() => commit((d) => ({ ...d, roles: d.roles.filter((x) => x.id !== r.id) }))}><Trash2 size={16} /></Button>
+              </div>
+              <select aria-label={`What ${r.name} is`} className={inputCls} value={roleKind(r)} onChange={(e) => { const v = e.target.value as RoleKind; setDraft((d) => ({ ...d, roles: d.roles.map((x) => x.id === r.id ? { ...x, kind: v } : x) })) }}>
+                <option value="person">A person</option><option value="team">A team</option><option value="agent">An AI agent (uses tools)</option><option value="system">An automated system</option>
+              </select>
+              {roleKind(r) === 'agent' && (
+                <CsvInput aria-label={`Tools ${r.name} can use`} placeholder="Tools it can use: MCP servers, APIs, apps (comma separated)" value={r.tools ?? []}
+                  onChange={(v) => setDraft((d) => ({ ...d, roles: d.roles.map((x) => x.id === r.id ? { ...x, tools: v } : x) }))} />
+              )}
             </div>
           )
         })}
         <Button variant="tonal" size="sm" className="self-start" onClick={() => commit((d) => { d.roles.push({ id: uid('r'), name: 'New role', color: ROLE_COLORS[d.roles.length % ROLE_COLORS.length] }); return d })}><Plus size={15} />Add role</Button>
       </div>
+      <div className="flex flex-col gap-2 rounded-2xl bg-surface-low p-3">
+        <div className="flex items-center gap-2"><b className="flex-1 text-sm">Resources from the library</b>
+          <Button variant="tonal" size="sm" onClick={onAutoAssign} title="Re-match every step you haven't edited by hand"><Sparkles size={14} />Auto-assign</Button></div>
+        <span className="text-xs text-on-surface-variant">{proc.steps.reduce((a, x) => a + (x.resourceIds?.length ?? 0), 0)} links across {proc.steps.filter((x) => x.resourceIds?.length).length} steps. Edit a step's resources in Details.</span>
+      </div>
+      <ResourcePicker title="Policies & related processes (whole process)" lib={library} ids={proc.linkedIds ?? []} categories={['policy', 'process']}
+        suggestions={[...linked.policies, ...linked.related]} onChange={(ids) => setDraft((d) => ({ ...d, linkedIds: ids }))} onCreate={onCreate} />
       <label className="flex items-center gap-2.5 text-sm font-semibold"><input type="checkbox" className="h-5 w-5" checked={!proc.needsCompleting} onChange={(e) => set({ needsCompleting: !e.target.checked })} />This process is complete</label>
       <p className="m-0 flex items-center gap-1.5 text-xs text-on-surface-variant"><CircleDot size={12} />Changes save automatically in this browser. Export from Admin to share with everyone.</p>
     </div>

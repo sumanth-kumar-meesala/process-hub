@@ -9,9 +9,11 @@ export const PERSONAS: { id: Persona; label: string; blurb: string }[] = [
 ]
 
 /** What a stage island shows in 3D. 'auto' picks one from the stage's words. */
-export type SceneKind = 'auto' | 'home' | 'office' | 'calendar' | 'classroom' | 'records' | 'payment' | 'delivery' | 'generic'
+export type SceneKind = 'auto' | 'home' | 'office' | 'calendar' | 'classroom' | 'records' | 'payment' | 'delivery' | 'ai' | 'generic'
 
-export interface Role { id: string; name: string; color: string }
+export type RoleKind = 'person' | 'team' | 'agent' | 'system'
+/** kind 'agent' = an AI agent; tools are the MCP servers / APIs / apps it can use */
+export interface Role { id: string; name: string; color: string; kind?: RoleKind; tools?: string[] }
 
 export interface Stage {
   id: string
@@ -36,6 +38,25 @@ export interface Step {
   label: string
   roleId: string
   stageId: string
+  /** library items (forms, documents, guides, policies) this step uses */
+  resourceIds?: string[]
+  /** true once a person edited this step's resources, so auto-assign leaves it alone */
+  resourcesTouched?: boolean
+}
+
+export type ResourceCategory = 'form' | 'client-doc' | 'guide' | 'policy' | 'process'
+/** One item in the shared resource library */
+export interface LibraryItem {
+  id: string
+  title: string
+  category: ResourceCategory
+  url?: string
+  /** extra words that help matching (e.g. systems, topics) */
+  tags?: string[]
+  /** for category 'process': the Process Hub process it opens */
+  processId?: string
+  /** added by the AI or a builder and not yet reviewed by an admin */
+  isNew?: boolean
 }
 
 export interface Edge { id: string; from: string; to: string; label?: string }
@@ -91,7 +112,10 @@ export interface Process {
   stages: Stage[]
   steps: Step[]
   edges: Edge[]
+  /** legacy fixed groups (older data); new processes use library links instead */
   resources: ResourceGroup[]
+  /** process-wide policies and related processes, from the library */
+  linkedIds?: string[]
   roleDetails: RoleDetail[]
   ownerDetail?: OwnerDetail
   /** where the builder placed things, keyed by step id */

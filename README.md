@@ -17,7 +17,7 @@ Personas (from the RBAC slides): Process Performer, People Leader, Process Owner
 
 ## Starter processes
 
-Only processes from the Scope / KPMG mockups are included (`src/data/seed.ts`):
+Only processes from the original mockups are included (`src/data/seed.ts`):
 
 - **FS25 · Client Specific Training** — complete
 - New Employee Onboarding, Employee Exit & Offboarding, Leave Request & Approval, Purchase Requisition to Payment — only partial information existed, so they are marked **"Being completed"** for their owners to finish in the Builder.
@@ -49,8 +49,25 @@ npm run build      # production build in dist/
 
 ## Publish on GitHub Pages
 
-1. Create a repo (e.g. `process-hub`) and push this folder to the `main` branch.
-2. In the repo: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-3. Every push to `main` runs `.github/workflows/deploy.yml` and publishes the site at `https://<your-user>.github.io/process-hub/`.
+**Option A — one command (simplest)**
 
-The app uses hash URLs (`#/process/...`) so it works from any Pages path without extra configuration.
+1. Create an empty GitHub repo called `process-hub` and push this folder to it (see below).
+2. Run `npm run deploy`. This builds the site and pushes it to a `gh-pages` branch.
+3. In the repo: **Settings → Pages → Build and deployment → Source: Deploy from a branch → `gh-pages` / root**.
+4. The site appears at `https://<your-user>.github.io/process-hub/`. Run `npm run deploy` again whenever you want to publish changes.
+
+**Option B — automatic on every push**
+
+Move `setup/github-pages-workflow.yml` to `.github/workflows/deploy.yml`, push, and set **Settings → Pages → Source: GitHub Actions**.
+
+**First push**
+
+```bash
+git init -b main
+git add .
+git commit -m "Process Hub prototype"
+git remote add origin https://github.com/<your-user>/process-hub.git
+git push -u origin main
+```
+
+The app uses hash URLs (`#/process/...`) so it works from any Pages path without extra configuration. The mockup images in this folder are listed in `.gitignore`, so they are not uploaded.

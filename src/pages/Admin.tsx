@@ -3,15 +3,17 @@ import { Link } from 'react-router-dom'
 import { Download, Plus, RotateCcw, Sparkles, Trash2, Upload } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
+import { ConfirmButton } from '@/components/ui/confirm'
 import { Card } from '@/components/ui/card'
 import { useData, useSession } from '@/store/store'
-import { PERSONAS, type Persona, type Process } from '@/lib/types'
+import { PERSONAS, type Persona, type Process, type ResourceCategory } from '@/lib/types'
+import { CATEGORIES } from '@/lib/resources'
 import { displayName } from '@/lib/derive'
 import { INPUT_BUDGET, KEEP_MESSAGES, testGroq } from '@/ai/groq'
 import { cn } from '@/lib/utils'
 
 const MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
-type Tab = 'ai' | 'people' | 'processes'
+type Tab = 'ai' | 'people' | 'processes' | 'library'
 
 export default function Admin() {
   const { persona } = useSession()
@@ -27,7 +29,7 @@ export default function Admin() {
       <AppHeader />
       <main className="mx-auto flex max-w-[1240px] flex-wrap items-start gap-6 px-4 pb-16 pt-4 sm:px-8">
         <nav aria-label="Admin" className="flex w-full max-w-[260px] flex-col gap-1 sm:w-auto sm:flex-[1_1_220px]">
-          {([['ai', 'AI assistant'], ['people', 'People & access'], ['processes', 'Processes']] as [Tab, string][]).map(([id, label]) => (
+          {([['ai', 'AI assistant'], ['people', 'People & access'], ['processes', 'Processes'], ['library', 'Resource library']] as [Tab, string][]).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className={cn('h-12 cursor-pointer rounded-full border-0 px-4 text-left text-sm font-bold', tab === id ? 'bg-primary-container text-on-primary-container' : 'bg-transparent text-on-surface-variant hover:bg-surface-mid')}>{label}</button>
           ))}
         </nav>
@@ -35,6 +37,7 @@ export default function Admin() {
           {tab === 'ai' && <AiSettings />}
           {tab === 'people' && <People />}
           {tab === 'processes' && <Processes />}
+          {tab === 'library' && <Library />}
         </div>
       </main>
     </div>
@@ -158,11 +161,60 @@ function Processes() {
             <div className="flex-1"><Link to={`/process/${p.id}`} className="font-bold text-on-surface no-underline">{displayName(p)}</Link><div className="text-[13px] text-on-surface-variant">{p.owner} · {p.area}{p.needsCompleting ? ' · being completed' : ''}</div></div>
             <span className={cn('text-xs font-bold', p.status === 'published' ? 'text-secondary' : 'text-on-surface-variant')}>{p.status === 'published' ? 'Published' : 'Draft'}</span>
             <Button variant="text" size="sm" asChild><Link to={`/builder/${p.id}`}>Edit</Link></Button>
-            {!p.seeded && <Button variant="icon" size="icon" aria-label={`Delete ${p.title}`} onClick={() => remove(p.id)}><Trash2 size={16} /></Button>}
+            <ConfirmButton iconOnly label={`Delete ${p.title}`} question="Delete?" confirmLabel="Delete" icon={<Trash2 size={16} />} onConfirm={() => remove(p.id)} />
           </div>
         ))}
       </div>
-      <Button variant="danger" className="self-start" onClick={() => { resetToStarter(); setNote('Back to the five starter processes.') }}><RotateCcw size={16} />Reset to starter processes</Button>
+      <div className="self-start"><ConfirmButton label="Reset to starter processes" question="Replace everything with the five starter processes?" confirmLabel="Reset" icon={<RotateCcw size={16} />} onConfirm={() => { resetToStarter(); setNote('Back to the five starter processes.') }} /></div>
+    </Card>
+  )
+}
+
+function Library() {
+  const { library, processes, addLibraryItems, updateLibraryItem, removeLibraryItem } = useData()
+  const [q, setQ] = useState('')
+  const [nt, setNt] = useState({ title: '', category: 'form' as ResourceCategory, url: '', tags: '' })
+  const uses = (id: string) => processes.reduce((a, p) => a + p.steps.filter((s) => s.resourceIds?.includes(id)).length + ((p.linkedIds ?? []).includes(id) ? 1 : 0), 0)
+  const shown = library.filter((it) => `${it.title} ${(it.tags ?? []).join(' ')}`.toLowerCase().includes(q.toLowerCase()))
+  const add = () => {
+    if (!nt.title.trim()) return
+    addLibraryItems([{ id: `lib-${Date.now().toString(36)}`, title: nt.title.trim(), category: nt.category, url: nt.url.trim() || undefined, tags: nt.tags.split(',').map((x) => x.trim()).filter(Boolean) }])
+    setNt({ title: '', category: nt.category, url: '', tags: '' })
+  }
+  return (
+    <Card className="flex flex-col gap-4 rounded-[28px] p-7">
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="m-0 flex-1 text-2xl font-extrabold">Resource library</h1>
+        <label htmlFor="libq" className="sr-only">Search the library</label>
+        <input id="libq" className={cn(inputCls, 'max-w-[260px]')} placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <p className="m-0 text-[13px] text-on-surface-variant">Forms, client documents, guides, policies and related processes shared by every process. When a process is built, each step is linked to the items it needs automatically. “Tags” are extra words that help that matching. Items added by the AI or a builder are marked <b>New</b> until you review them.</p>
+      <form onSubmit={(e) => { e.preventDefault(); add() }} className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2 rounded-[20px] bg-surface-low p-3">
+        <input className={inputCls} placeholder="New item name" value={nt.title} onChange={(e) => setNt({ ...nt, title: e.target.value })} aria-label="New item name" />
+        <select className={inputCls} value={nt.category} onChange={(e) => setNt({ ...nt, category: e.target.value as ResourceCategory })} aria-label="Type">{CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.one}</option>)}</select>
+        <input className={inputCls} placeholder="Link (optional)" value={nt.url} onChange={(e) => setNt({ ...nt, url: e.target.value })} aria-label="Link" />
+        <input className={inputCls} placeholder="Tags, comma separated" value={nt.tags} onChange={(e) => setNt({ ...nt, tags: e.target.value })} aria-label="Tags" />
+        <Button type="submit" disabled={!nt.title.trim()}><Plus size={16} />Add to library</Button>
+      </form>
+      {CATEGORIES.map((c) => {
+        const items = shown.filter((it) => it.category === c.id)
+        if (!items.length) return null
+        return (
+          <div key={c.id} className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 pb-1"><span className="h-3 w-3 rounded-full" style={{ background: c.color }} /><b>{c.title}</b><span className="text-[13px] text-on-surface-variant">{items.length}</span></div>
+            {items.map((it) => (
+              <div key={it.id} className="flex flex-wrap items-center gap-2 border-b border-surface-mid py-2 last:border-0">
+                <input aria-label="Name" className="h-10 min-w-[200px] flex-[2_1_220px] rounded-xl border border-outline-variant bg-white px-3 text-sm font-semibold" defaultValue={it.title} onBlur={(e) => e.target.value.trim() && e.target.value !== it.title && updateLibraryItem(it.id, { title: e.target.value.trim() })} />
+                <input aria-label="Link" className="h-10 min-w-[160px] flex-[1_1_180px] rounded-xl border border-outline-variant bg-white px-3 text-sm" placeholder="Link" defaultValue={it.url ?? ''} onBlur={(e) => updateLibraryItem(it.id, { url: e.target.value.trim() || undefined })} />
+                <input aria-label="Tags" className="h-10 min-w-[160px] flex-[1_1_180px] rounded-xl border border-outline-variant bg-white px-3 text-sm" placeholder="Tags" defaultValue={(it.tags ?? []).join(', ')} onBlur={(e) => updateLibraryItem(it.id, { tags: e.target.value.split(',').map((x) => x.trim()).filter(Boolean) })} />
+                <span className="w-[70px] text-xs text-on-surface-variant">{uses(it.id)} use{uses(it.id) === 1 ? '' : 's'}</span>
+                {it.isNew && <Button variant="tonal" size="sm" onClick={() => updateLibraryItem(it.id, { isNew: false })}>New · mark reviewed</Button>}
+                <ConfirmButton iconOnly label={`Delete ${it.title}`} question={uses(it.id) ? 'Delete and unlink?' : 'Delete?'} confirmLabel="Delete" icon={<Trash2 size={16} />} onConfirm={() => removeLibraryItem(it.id)} />
+              </div>
+            ))}
+          </div>
+        )
+      })}
     </Card>
   )
 }

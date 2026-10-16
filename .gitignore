@@ -23,7 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Internal mockups / persona slides — keep out of the public repo
-kpmg_mockup_*.jpg
-scope_mockup_*.jpg
-persona_*.jpg
+# Reference images kept next to the project — not part of the app
+/*.jpg
+/*.jpeg
+/*.png

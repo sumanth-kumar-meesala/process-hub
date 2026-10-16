@@ -1,21 +1,26 @@
-import { ROLE_COLORS, STAGE_COLORS, uid, type Process, type StepKind } from '@/lib/types'
+import { ROLE_COLORS, STAGE_COLORS, uid, type LibraryItem, type Process, type ResourceCategory, type StepKind } from '@/lib/types'
 
 /** Small, safe edit operations the AI may propose. Applied only after the user clicks Apply. */
 export type Op =
-  | { op: 'add_role'; name: string }
+  | { op: 'clear_draft' }
+  | { op: 'add_role'; name: string; kind?: 'person' | 'team' | 'agent' | 'system'; tools?: string[] }
   | { op: 'rename_role'; role: string; name: string }
-  | { op: 'add_stage'; title: string; short?: string; place?: string; text?: string; systems?: string[]; docs?: string[] }
+  | { op: 'add_stage'; id?: string; title: string; short?: string; place?: string; text?: string; systems?: string[]; docs?: string[] }
   | { op: 'update_stage'; stage: string; title?: string; short?: string; place?: string; text?: string; systems?: string[]; docs?: string[] }
   | { op: 'add_step'; id?: string; label: string; role: string; stage: string; kind?: StepKind; after?: string }
   | { op: 'update_step'; step: string; label?: string; role?: string; stage?: string }
   | { op: 'remove_step'; step: string }
   | { op: 'connect'; from: string; to: string; label?: string }
   | { op: 'disconnect'; from: string; to: string }
+  | { op: 'attach'; step: string; resource: string; category?: string }
+  | { op: 'detach'; step: string; resource: string }
   | { op: 'set_meta'; title?: string; summary?: string; nutshell?: string; audience?: string; triggers?: string[]; outcomes?: string[] }
 
 const norm = (s: string) => s.trim().toLowerCase()
 
-export function applyOps(src: Process, ops: Op[]): { next: Process; added: Set<string>; notes: string[] } {
+export function applyOps(src: Process, ops: Op[], lib: LibraryItem[] = []): { next: Process; added: Set<string>; notes: string[]; newItems: LibraryItem[] } {
+  const newItems: LibraryItem[] = []
+  const findItem = (r: string) => [...lib, ...newItems].find((x) => x.id === r || norm(x.title) === norm(r))
   const p: Process = structuredClone(src)
   const added = new Set<string>()
   const notes: string[] = []
@@ -31,10 +36,11 @@ export function applyOps(src: Process, ops: Op[]): { next: Process; added: Set<s
   for (const o of ops) {
     try {
       switch (o.op) {
-        case 'add_role': if (!findRole(o.name)) ensureRole(o.name); break
+        case 'clear_draft': p.roles = []; p.stages = []; p.steps = []; p.edges = []; p.layout = {}; notes.push('~ fresh start'); break
+        case 'add_role': { const r = findRole(o.name) ?? ensureRole(o.name); if (r) { if (o.kind) r.kind = o.kind; if (o.tools?.length) { r.tools = o.tools; r.kind = r.kind ?? 'agent' } } break }
         case 'rename_role': { const r = findRole(o.role); if (r) { r.name = o.name; notes.push(`~ role ${o.name}`) } break }
         case 'add_stage': {
-          const id = uid('s')
+          const id = o.id && !p.stages.some((x) => x.id === o.id) ? o.id : uid('s')
           p.stages.push({ id, title: o.title, short: o.short || o.title.split(' ').slice(0, 3).join(' '), place: o.place || '', text: o.text || '', color: STAGE_COLORS[p.stages.length % STAGE_COLORS.length], systems: o.systems ?? [], docs: o.docs ?? [], roleIds: [], scene: 'auto' })
           notes.push(`+ stage ${o.short || o.title}`); break
         }
@@ -45,7 +51,10 @@ export function applyOps(src: Process, ops: Op[]): { next: Process; added: Set<s
           notes.push(`~ stage ${s.short}`); break
         }
         case 'add_step': {
-          const role = ensureRole(o.role); const stage = findStage(o.stage)
+          const role = ensureRole(o.role || 'Team')
+          let stage = findStage(o.stage)
+          if (!stage && o.stage) { const sid = uid('s'); p.stages.push({ id: sid, title: o.stage, short: o.stage, place: '', text: '', color: STAGE_COLORS[p.stages.length % STAGE_COLORS.length], systems: [], docs: [], roleIds: [], scene: 'auto' }); stage = p.stages[p.stages.length - 1] }
+          if (!stage) stage = p.stages[p.stages.length - 1]
           if (!role || !stage) break
           const id = o.id && !findStep(o.id) ? o.id : uid('st')
           p.steps.push({ id, kind: o.kind ?? 'step', label: o.label, roleId: role.id, stageId: stage.id })
@@ -82,6 +91,18 @@ export function applyOps(src: Process, ops: Op[]): { next: Process; added: Set<s
           if (a && b) { p.edges = p.edges.filter((e) => !(e.from === a.id && e.to === b.id)); notes.push(`− link ${a.label} → ${b.label}`) }
           break
         }
+        case 'attach': {
+          const s = findStep(o.step); if (!s || !o.resource) break
+          let it = findItem(o.resource)
+          if (!it) { const cat = (['form', 'client-doc', 'guide', 'policy', 'process'].includes(o.category ?? '') ? o.category : 'form') as ResourceCategory; it = { id: uid('lib'), title: o.resource, category: cat, isNew: true }; newItems.push(it); notes.push(`+ new library item “${it.title}”`) }
+          s.resourceIds = [...new Set([...(s.resourceIds ?? []), it.id])]; s.resourcesTouched = true
+          notes.push(`~ resource for “${s.label}”`); break
+        }
+        case 'detach': {
+          const s = findStep(o.step); const it = findItem(o.resource); if (!s || !it) break
+          s.resourceIds = (s.resourceIds ?? []).filter((x) => x !== it.id); s.resourcesTouched = true
+          notes.push(`~ resource for “${s.label}”`); break
+        }
         case 'set_meta': {
           if (o.title) p.title = o.title; if (o.summary) p.summary = o.summary; if (o.nutshell) p.nutshell = o.nutshell
           if (o.audience) p.audience = o.audience; if (o.triggers) p.triggers = o.triggers; if (o.outcomes) p.outcomes = o.outcomes
@@ -90,7 +111,20 @@ export function applyOps(src: Process, ops: Op[]): { next: Process; added: Set<s
       }
     } catch { /* ignore a malformed op, keep the rest */ }
   }
-  return { next: p, added, notes }
+  // safety net: link any new step the AI left unconnected to the one before it
+  const order = p.steps.filter((s) => added.has(s.id))
+  order.forEach((s, i) => {
+    if (i === 0 || s.kind === 'start') return
+    const prev = order[i - 1]
+    const prevDangles = prev.kind !== 'end' && !p.edges.some((e) => e.from === prev.id)
+    const orphan = !p.edges.some((e) => e.to === s.id)
+    if (prevDangles || (orphan && prev.kind !== 'end' && prev.kind !== 'decision')) p.edges.push({ id: uid('e'), from: prev.id, to: s.id })
+  })
+  // drop placeholder roles/stages left empty after a rebuild
+  if (ops.some((o) => o.op === 'clear_draft')) {
+    p.roles = p.roles.filter((r) => p.steps.some((s) => s.roleId === r.id) || p.stages.some((st) => st.roleIds.includes(r.id)))
+  }
+  return { next: p, added, notes, newItems }
 }
 
 export const summariseNotes = (notes: string[]) => {
