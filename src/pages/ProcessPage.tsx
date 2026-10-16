@@ -42,6 +42,7 @@ function ProcessView({ proc }: { proc: Process }) {
   const [hoverStep, setHoverStep] = useState<string | null>(null)
   const [walking, setWalking] = useState(false)
   const [asking, setAsking] = useState(false)
+  const [myPart, setMyPart] = useState(false)
   const [params] = useSearchParams()
   const w = useWalk(proc)
   const n = proc.stages.length
@@ -57,7 +58,7 @@ function ProcessView({ proc }: { proc: Process }) {
   useEffect(() => {
     const as = params.get('as')
     const r = as && proc.roles.find((x) => x.id === as || x.name.toLowerCase() === as.toLowerCase())
-    if (r) { setRole(r.id); }
+    if (r) { setRole(r.id); setMyPart(true) }
   }, [params, proc.roles])
 
   // Esc zooms back out
@@ -77,6 +78,11 @@ function ProcessView({ proc }: { proc: Process }) {
   const startWalk = () => { if (!w.walk.started || w.walk.finished) w.start(); setWalking(true); setOpen(false) }
   const stopWalk = () => { setWalking(false); setFocus(null) }
   const walkView = walking ? { done: new Set(w.walk.done), current: w.walk.current, finished: w.walk.finished, nonce: w.walk.nonce } : null
+  const toggleMyPart = () => {
+    const on = !myPart; setMyPart(on)
+    if (on && !role) setRole(myRoleId ?? proc.roles[0]?.id ?? null)
+    if (!on) setRole(null)
+  }
 
   return (
     <div className="min-h-full">
@@ -125,6 +131,7 @@ function ProcessView({ proc }: { proc: Process }) {
               <Button onClick={walking ? stopWalk : startWalk} className={walking ? 'bg-on-surface' : ''}>
                 <Footprints size={16} />{walking ? 'Stop walking' : w.walk.started && !w.walk.finished ? `Continue walking (${w.doneCount}/${w.total})` : 'Walk it with me'}
               </Button>
+              <Button variant="outlined" onClick={toggleMyPart} aria-pressed={myPart} className={myPart ? 'border-primary bg-primary-container text-on-primary-container' : ''}><UserRound size={16} />Just my part</Button>
               <Button variant="outlined" onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={16} />Ask about this process</Button>
               {w.walk.started && !walking && <Button variant="text" size="sm" onClick={w.reset}>Reset walk</Button>}
             </div>
@@ -152,6 +159,8 @@ function ProcessView({ proc }: { proc: Process }) {
             {asking && <AskPanel proc={proc} onClose={() => setAsking(false)} onShowStage={(k) => { setAsking(false); setWalking(false); select(k) }} />}
 
           </div>
+
+          {myPart && role && <MyPart proc={proc} roleId={role} onRole={setRole} onOpen={(stageIdx, stepId) => { setWalking(false); select(stageIdx); setSelStep(stepId) }} />}
 
           {n > 0 && (
             <div className="glass relative z-[1] flex flex-col gap-4 rounded-[26px] px-5 py-5">
@@ -247,7 +256,13 @@ function StagePanel({ proc, k, onClose, onNext, selStep, onStep, onHoverStep }: 
         <h2 className="m-0 pr-8 text-[22px] font-extrabold leading-tight">{s.title}</h2>
       </div>
       <div className="flex flex-col gap-4 overflow-y-auto px-5 pb-5 pt-4">
-        <p className="m-0 text-sm leading-relaxed text-on-surface-variant"><Terms text={s.text} /></p>
+        {/^\[.*\]$/.test(s.text.trim()) ? null : <p className="m-0 text-sm leading-relaxed text-on-surface-variant"><Terms text={s.text} /></p>}
+        {steps.length === 0 && (
+          <div className="flex flex-col gap-1 rounded-2xl border-2 border-dashed px-3.5 py-3 text-sm" style={{ borderColor: tint(s.color, 0.5) }}>
+            <b>The steps for this stage haven't been added yet</b>
+            <span className="text-on-surface-variant">{proc.owner} is still completing this process. You can see who's involved below.</span>
+          </div>
+        )}
         {steps.length > 0 && (
           <div className="flex flex-col gap-1"><span className="lbl">What happens <span className="normal-case tracking-normal font-semibold">· tap a step</span></span>
             {steps.map((st, n) => {
@@ -319,6 +334,49 @@ function StagePanel({ proc, k, onClose, onNext, selStep, onStep, onHoverStep }: 
         </button>
       </div>
     </aside>
+  )
+}
+
+/** "Just my part": a checklist of only the steps for one role, ticked off in this browser. */
+function MyPart({ proc, roleId, onRole, onOpen }: { proc: Process; roleId: string; onRole: (id: string) => void; onOpen: (stageIdx: number, stepId: string) => void }) {
+  const key = `ph-mine-${proc.id}`
+  const [ticked, setTicked] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem(key) ?? '[]') } catch { return [] } })
+  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(ticked)) } catch { /* ignore */ } }, [key, ticked])
+  const role = proc.roles.find((r) => r.id === roleId)
+  const steps = proc.steps.filter((s) => s.roleId === roleId && (s.kind === 'step' || s.kind === 'decision'))
+  const library = useData((st) => st.library)
+  const doneN = steps.filter((s) => ticked.includes(s.id)).length
+  return (
+    <div className="relative z-[1] flex flex-col gap-3 rounded-[26px] border-2 bg-white px-5 py-4" style={{ borderColor: role?.color }}>
+      <div className="flex flex-wrap items-center gap-3">
+        <UserRound size={20} style={{ color: role?.color }} aria-hidden />
+        <h2 className="m-0 text-lg font-extrabold">Just my part</h2>
+        <select value={roleId} onChange={(e) => onRole(e.target.value)} aria-label="My role" className="h-9 rounded-full border border-outline-variant bg-white px-3 text-sm font-bold">
+          {proc.roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </select>
+        <span className="text-[13px] text-on-surface-variant">{steps.length ? `${doneN} of ${steps.length} ticked` : ''}</span>
+        <div className="flex-1" />
+        {doneN > 0 && <Button variant="text" size="sm" onClick={() => setTicked((t) => t.filter((x) => !steps.some((s) => s.id === x)))}>Clear ticks</Button>}
+      </div>
+      {steps.length === 0 ? <p className="m-0 text-sm text-on-surface-variant">{role?.name} has no steps in this process yet.</p> : (
+        <ol className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-2 p-0">
+          {steps.map((st) => {
+            const k = proc.stages.findIndex((x) => x.id === st.stageId), sg = proc.stages[k]
+            const on = ticked.includes(st.id), res = stepResources(st, library)
+            return (
+              <li key={st.id} className={cn('flex items-start gap-2.5 rounded-2xl p-2.5 transition-colors', on ? 'bg-[#E8F7EE]' : 'bg-surface-low')}>
+                <button onClick={() => setTicked((t) => on ? t.filter((x) => x !== st.id) : [...t, st.id])} aria-pressed={on} aria-label={on ? 'Untick' : 'Tick as done'}
+                  className={cn('mt-0.5 flex h-6 w-6 flex-none cursor-pointer items-center justify-center rounded-lg border-2', on ? 'border-[#16A34A] bg-[#16A34A]' : 'border-outline bg-white')}>{on && <Check size={15} color="#fff" strokeWidth={3} />}</button>
+                <button onClick={() => onOpen(k, st.id)} className="flex flex-1 cursor-pointer flex-col gap-0.5 border-0 bg-transparent p-0 text-left">
+                  <span className={cn('text-sm font-semibold', on && 'text-on-surface-variant line-through')}><Terms text={st.label} /></span>
+                  <span className="text-xs text-on-surface-variant"><span className="font-bold" style={{ color: sg?.color }}>Stage {k + 1}</span> · {sg?.short}{res.length ? ` · ${res.map((r) => r.title).join(', ')}` : ''}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </div>
   )
 }
 

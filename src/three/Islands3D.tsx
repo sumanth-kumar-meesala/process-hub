@@ -577,23 +577,34 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
           {process.stages.map((s, k) => {
             const roles = stageRoleList[k]
             const isActive = k === active
+            // zoomed in and the stage has steps → show step platforms instead of the scenery
+            const hasSteps = process.steps.some((x) => x.stageId === s.id && (x.kind === 'step' || x.kind === 'decision'))
+            const platforms = focus === k && hasSteps
             return (
               <Island key={s.id} pos={posOf(k + 1)} color={s.color} top={tint(s.color, 0.16)} side={s.color}
                 active={(isActive || focus === k) && !compact} hovered={hover === k} dim={dimOf(k)}
                 onClick={onSelect ? () => onSelect(k) : undefined}
                 onOver={onHover ? () => onHover(k) : undefined} onOut={onHover ? () => onHover(null) : undefined}>
-                {focus === k && !compact && (
+                {focus === k && !compact && !hasSteps && (
+                  <Html position={[0, 3.1, 0]} center zIndexRange={[16, 0]} style={{ pointerEvents: 'none' }}>
+                    <div className="flex w-[210px] flex-col items-center gap-0.5 rounded-2xl border-2 border-dashed bg-white px-3 py-2 text-center shadow" style={{ borderColor: s.color }}>
+                      <span className="text-[13px] font-extrabold text-[#151A25]">Steps not added yet</span>
+                      <span className="text-[11px] font-semibold text-[#4A5163]">{process.owner} is still completing this stage</span>
+                    </div>
+                  </Html>
+                )}
+                {platforms && !compact && (
                   <StepPlatforms process={process} stageId={s.id} color={s.color} selected={selectedStep} hoverStep={hoverStep} onStep={onStep} walk={walk} showLabels />
                 )}
                 {stageDone(k) && <DoneFlag />}
-                {focus !== k && <Scenery kind={sceneFor(s)} color={s.color} />}
-                {focus !== k && [...roles].sort((x, y) => Number(roleKind(y) === 'agent') - Number(roleKind(x) === 'agent')).slice(0, 3).map((r, i) => {
+                {!platforms && <Scenery kind={sceneFor(s)} color={s.color} />}
+                {!platforms && [...roles].sort((x, y) => Number(roleKind(y) === 'agent') - Number(roleKind(x) === 'agent')).slice(0, 3).map((r, i) => {
                   const pp: V3 = roleKind(r) === 'agent' ? [-0.75, 0, 1.0] : [0.2 + i * 0.6, 0, 1.15 - i * 0.15]
                   return roleKind(r) === 'agent'
                     ? <group key={r.id}><Robot p={pp} color={r.color} />{!compact && <ToolsOrbit p={[pp[0], pp[1] + 0.4, pp[2]]} tools={r.tools ?? []} color={r.color} labels={isActive} />}</group>
                     : <Person key={r.id} p={pp} color={r.color} />
                 })}
-                {focus !== k && process.steps.some((x) => x.stageId === s.id && x.kind === 'decision') && <CheckSign repeat={loops.some((l) => l.from === k && l.to === k)} />}
+                {!platforms && process.steps.some((x) => x.stageId === s.id && x.kind === 'decision') && <CheckSign repeat={loops.some((l) => l.from === k && l.to === k)} />}
                 {!compact && s.systems[0] && (!narrow || isActive) && (focus === null || focus === k) && (
                   <Float speed={2} floatIntensity={0.6} rotationIntensity={0}>
                     <Html position={[1.1, 2.6, -1]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? 0.25 : 1 }}>
