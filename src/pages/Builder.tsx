@@ -6,7 +6,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import {
-  ArrowLeft, Box, X, Bot, CircleDot, Diamond, Eye, FileText, Flag, Maximize, Minus, Monitor, Plus, RotateCcw, Send, Sparkles, Trash2, Trophy, User, Users, LayoutGrid, ChevronLeft, ChevronRight, Check,
+  ArrowLeft, Box, X, Bot, CircleDot, Diamond, Eye, FileText, Flag, Maximize, Minus, Monitor, Plus, RotateCcw, Send, Sparkles, Trash2, Trophy, User, Users, LayoutGrid, ChevronLeft, ChevronRight, Check, HelpCircle, AlertTriangle, Server,
 } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
@@ -18,7 +18,7 @@ import { CATEGORIES, autoAssign, catOf, suggestFor, suggestLinked } from '@/lib/
 import { displayName, roleKind, stepCount } from '@/lib/derive'
 import { applyOps, summariseNotes, type Op } from '@/ai/ops'
 import { specToProcess } from '@/ai/build'
-import { askGroq, foldHistory, buildMessages, INPUT_BUDGET, type ChatMsg } from '@/ai/groq'
+import { askGroq, clarifyBuild, isBuildRequest, foldHistory, buildMessages, INPUT_BUDGET, type ChatMsg, type AskResult, type Question } from '@/ai/groq'
 import { cn } from '@/lib/utils'
 
 /* ---------- layout grid: columns = stages, rows (lanes) = roles ---------- */
@@ -214,7 +214,8 @@ const computeEdges = (p: Process, added: Set<string>): RFEdge[] => p.edges.map((
 
 const NONE = new Set<string>()
 type Sel = { type: 'step' | 'edge' | 'stage'; id: string } | null
-type Pending = { ops: Op[]; reply: string; notes: string[]; preview: Process; added: Set<string>; replaces?: boolean; newItems: LibraryItem[] }
+type Pending = { ops: Op[]; reply: string; notes: string[]; preview: Process; added: Set<string>; replaces?: boolean; newItems: LibraryItem[]; gaps?: string[] }
+type Asking = { request: string; items: Question[]; picks: Record<number, string[]>; other: Record<number, string> }
 
 /* ===================================================================== */
 function Editor({ initial }: { initial: Process }) {
@@ -224,6 +225,7 @@ function Editor({ initial }: { initial: Process }) {
   const library = useData((s) => s.library)
   const allProcesses = useData((s) => s.processes)
   const addLibraryItems = useData((s) => s.addLibraryItems)
+  const systems = useData((s) => s.systems)
   const nav = useNavigate()
   const rf = useReactFlow()
   const opened = useRef(initial)
@@ -235,6 +237,7 @@ function Editor({ initial }: { initial: Process }) {
   const [chat, setChat] = useState<(ChatMsg & { applied?: string })[]>([])
   const [summary, setSummary] = useState('')
   const [pending, setPending] = useState<Pending | null>(null)
+  const [asking, setAsking] = useState<Asking | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
@@ -317,27 +320,66 @@ function Editor({ initial }: { initial: Process }) {
   }
 
   /* --- AI --- */
+  const handle = (r: AskResult) => {
+    setSummary(r.summary)
+    setChat((c) => [...c, { role: 'assistant', content: r.reply + (r.truncated ? ' (My answer was cut short — say “continue” and I’ll add the rest.)' : '') }])
+    if (r.spec) {
+      const { next, added, notes, newItems } = specToProcess(draft, r.spec, library)
+      setPending({ ops: [], reply: r.reply, notes, preview: next, added, replaces: true, newItems, gaps: r.gaps })
+    } else if (r.ops.length) {
+      const { next, added, notes, newItems } = applyOps(draft, r.ops, library)
+      setPending({ ops: r.ops, reply: r.reply, notes, preview: next, added, newItems })
+    }
+  }
+  const history = (extra: string): ChatMsg[] => [...chat.map(({ role, content }) => ({ role, content })), { role: 'user', content: extra }]
+  const run = async (fn: () => Promise<void>) => {
+    setErr(''); setBusy(true)
+    try { await fn() } catch (e) { setErr((e as Error).message || 'Something went wrong talking to Groq.') } finally { setBusy(false) }
+  }
+
   const send = async (text: string) => {
     if (!text.trim() || busy) return
     if (!groqKey) { setErr('No Groq key yet. The Global Admin adds it in Admin → AI assistant.'); return }
-    setErr(''); setBusy(true); setMsg('')
-    const history: ChatMsg[] = [...chat.map(({ role, content }) => ({ role, content })), { role: 'user', content: text }]
+    setMsg('')
     setChat((c) => [...c, { role: 'user', content: text }])
-    try {
-      const r = await askGroq({ key: groqKey, model, process: draft, history, summary, library })
-      setSummary(r.summary)
-      setChat((c) => [...c, { role: 'assistant', content: r.reply + (r.truncated ? ' (My answer was cut short — say “continue” and I’ll add the rest.)' : '') }])
-      if (r.spec) {
-        const { next, added, notes, newItems } = specToProcess(draft, r.spec, library)
-        setPending({ ops: [], reply: r.reply, notes, preview: next, added, replaces: true, newItems })
-      } else if (r.ops.length) {
-        const { next, added, notes, newItems } = applyOps(draft, r.ops, library)
-        setPending({ ops: r.ops, reply: r.reply, notes, preview: next, added, newItems })
+    await run(async () => {
+      // a whole new process: ask about systems, approvals and edge cases before building
+      if (!pending && isBuildRequest(text, draft)) {
+        const c = await clarifyBuild({ key: groqKey, model, request: text, systems, library })
+        if (c.questions.length) {
+          setChat((x) => [...x, { role: 'assistant', content: c.reply }])
+          setAsking({ request: text, items: c.questions, picks: {}, other: {} })
+          return
+        }
+        handle(await askGroq({ key: groqKey, model, process: draft, history: history(text), summary, library, systems, build: { request: text } }))
+        return
       }
-    } catch (e) {
-      setErr((e as Error).message || 'Something went wrong talking to Groq.')
-    } finally { setBusy(false) }
+      handle(await askGroq({ key: groqKey, model, process: draft, history: history(text), summary, library, systems }))
+    })
   }
+
+  const answerAndBuild = async (skip = false) => {
+    if (!asking || busy) return
+    const a = asking
+    const lines = a.items.map((q, k) => {
+      const ans = [...(a.picks[k] ?? []), ...(a.other[k]?.trim() ? [a.other[k].trim()] : [])]
+      return ans.length ? `- ${q.q} → ${ans.join(', ')}` : ''
+    }).filter(Boolean)
+    const answers = skip || !lines.length ? '' : lines.join('\n')
+    setAsking(null)
+    setChat((c) => [...c, { role: 'user', content: answers ? `My answers:\n${answers}` : 'Skip the questions — use your best judgement.' }])
+    await run(async () => {
+      handle(await askGroq({ key: groqKey, model, process: draft, history: history(a.request), summary, library, systems,
+        build: { request: a.request, answers: answers || 'The owner skipped the questions: make sensible assumptions, mark unknown systems with [confirm], and still cover the edge cases.' } }))
+    })
+  }
+  const pick = (k: number, opt: string, multi?: boolean) => setAsking((a) => {
+    if (!a) return a
+    const cur = a.picks[k] ?? []
+    const nextPicks = multi ? (cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt]) : (cur[0] === opt ? [] : [opt])
+    return { ...a, picks: { ...a.picks, [k]: nextPicks } }
+  })
+
   const applyPending = () => {
     if (!pending) return
     const label = summariseNotes(pending.notes)
@@ -438,25 +480,66 @@ function Editor({ initial }: { initial: Process }) {
                   </div>
                 )}
                 {chat.map((m, k) => m.role === 'user'
-                  ? <div key={k} className="max-w-[88%] self-end rounded-[18px_18px_4px_18px] bg-primary px-3.5 py-3 text-sm leading-normal text-white">{m.content}</div>
+                  ? <div key={k} className="max-w-[88%] self-end whitespace-pre-wrap rounded-[18px_18px_4px_18px] bg-primary px-3.5 py-3 text-sm leading-normal text-white">{m.content}</div>
                   : (
                     <div key={k} className="flex max-w-[94%] flex-col gap-2">
                       <div className="rounded-[18px_18px_18px_4px] bg-surface-low px-3.5 py-3 text-sm leading-normal">{m.content}</div>
                       {m.applied && <div className="flex items-center gap-2 rounded-[14px] bg-[#F1FAF4] px-3 py-2.5 text-[13px]"><Check size={16} className="text-secondary" /><span><b>Applied</b> · {m.applied}</span></div>}
                     </div>
                   ))}
-                {busy && <div className="w-fit rounded-[18px] bg-surface-low px-4 py-3 text-sm text-on-surface-variant">Thinking…</div>}
+                {asking && !busy && (
+                  <div className="flex flex-col gap-3 rounded-2xl border border-outline-variant bg-white p-3.5">
+                    {asking.items.map((q, k) => (
+                      <div key={k} className="flex flex-col gap-1.5">
+                        <div className="flex items-start gap-2 text-[13px] font-bold leading-snug"><HelpCircle size={15} className="mt-px flex-none text-primary" />{q.q}</div>
+                        {q.why && <span className="pl-[23px] text-[11px] text-on-surface-variant">{q.why}{q.multi ? ' · pick any' : ''}</span>}
+                        <div className="flex flex-wrap gap-1.5 pl-[23px]">
+                          {q.options.map((o) => {
+                            const on = (asking.picks[k] ?? []).includes(o)
+                            return <button key={o} onClick={() => pick(k, o, q.multi)} aria-pressed={on}
+                              className={cn('min-h-8 cursor-pointer rounded-full border px-3 py-1 text-left text-xs font-semibold', on ? 'border-primary bg-primary text-white' : 'border-outline-variant bg-white hover:bg-surface-low')}>{o}</button>
+                          })}
+                        </div>
+                        <input value={asking.other[k] ?? ''} onChange={(e) => { const v = e.target.value; setAsking((a) => a && ({ ...a, other: { ...a.other, [k]: v } })) }}
+                          placeholder="Or type your own answer" aria-label={`Your answer: ${q.q}`} className="ml-[23px] h-8 rounded-full border border-outline-variant px-3 text-xs outline-none focus:border-primary" />
+                      </div>
+                    ))}
+                    <div className="flex gap-2"><Button size="sm" className="flex-1" onClick={() => answerAndBuild()}><Sparkles size={14} />Build with these answers</Button><Button size="sm" variant="outlined" onClick={() => answerAndBuild(true)}>Skip</Button></div>
+                  </div>
+                )}
+                {busy && <div className="w-fit rounded-[18px] bg-surface-low px-4 py-3 text-sm text-on-surface-variant">{asking === null && chat[chat.length - 1]?.content.startsWith('My answers') ? 'Building the full process and checking the edge cases…' : 'Thinking…'}</div>}
                 {pending && (
                   <div className="flex flex-col gap-2.5 rounded-2xl bg-[#F2F5FF] p-3.5">
                     <div className="text-[13px] leading-normal"><b>{summariseNotes(pending.notes)}</b><span className="text-on-surface-variant">{pending.replaces ? ' — a complete new version, shown dashed. Apply replaces what was on the canvas.' : ' — shown dashed on the canvas'}</span></div>
                     <ul className="m-0 max-h-[120px] list-none overflow-y-auto p-0 text-xs text-on-surface-variant">{pending.notes.slice(0, 12).map((n, k) => <li key={k}>{n}</li>)}</ul>
+                    {pending.replaces && (pending.preview.exceptions?.length ?? 0) > 0 && (
+                      <div className="flex flex-col gap-1 rounded-xl bg-white p-2.5">
+                        <span className="text-xs font-extrabold">What if… — edge cases covered</span>
+                        {pending.preview.exceptions!.map((x, k) => <span key={k} className="flex items-start gap-1.5 text-xs"><Check size={13} className="mt-px flex-none text-secondary" /><span>{x.case}{x.handled && <span className="text-on-surface-variant"> → {x.handled}</span>}</span></span>)}
+                      </div>
+                    )}
+                    {pending.replaces && (() => {
+                      const confirm = [...new Set(pending.preview.stages.flatMap((st) => st.systems).filter((x) => /\[confirm\]/i.test(x)))]
+                      return confirm.length > 0 && (
+                        <div className="flex flex-col gap-1 rounded-xl bg-white p-2.5">
+                          <span className="flex items-center gap-1.5 text-xs font-extrabold"><Server size={13} />Systems to confirm</span>
+                          <span className="text-xs text-on-surface-variant">{confirm.map((x) => x.replace(/\[confirm\]\s*/i, '')).join(', ')} — tell me which of your systems these are, or add them in Admin → Internal systems.</span>
+                        </div>
+                      )
+                    })()}
+                    {pending.gaps && pending.gaps.length > 0 && (
+                      <div className="flex flex-col gap-1 rounded-xl bg-[#FFF7E6] p-2.5">
+                        <span className="flex items-center gap-1.5 text-xs font-extrabold text-[#9A3412]"><AlertTriangle size={13} />Still worth checking</span>
+                        {pending.gaps.map((g, k) => <span key={k} className="text-xs text-[#7A3A00]">• {g}</span>)}
+                      </div>
+                    )}
                     <div className="flex gap-2"><Button className="flex-1" size="sm" onClick={applyPending}>Apply</Button><Button className="flex-1" size="sm" variant="outlined" onClick={() => setPending(null)}>Discard</Button></div>
                   </div>
                 )}
                 {err && <div className="rounded-[14px] bg-error-container px-3.5 py-3 text-[13px] text-error">{err}{!groqKey && persona === 'admin' && <> <Link to="/admin">Open Admin</Link></>}</div>}
-                {!busy && !pending && (
+                {!busy && !pending && !asking && (
                   <div className="flex flex-wrap gap-1.5">
-                    {['Add the triggers', 'Rewrite steps in plain words', 'Is anything missing?'].map((q) => <button key={q} onClick={() => send(q)} className="h-8 cursor-pointer rounded-full border border-outline-variant bg-white px-3 text-xs font-semibold hover:bg-surface-low">{q}</button>)}
+                    {['Check for missing edge cases', 'Rewrite steps in plain words', 'Add the triggers'].map((q) => <button key={q} onClick={() => send(q)} className="h-8 cursor-pointer rounded-full border border-outline-variant bg-white px-3 text-xs font-semibold hover:bg-surface-low">{q}</button>)}
                   </div>
                 )}
               </div>
@@ -465,7 +548,7 @@ function Editor({ initial }: { initial: Process }) {
                   <span className="whitespace-nowrap">Memory {(memory / 1000).toFixed(1)}k / {INPUT_BUDGET / 1000}k</span>
                   <span className="h-1.5 flex-1 rounded bg-surface-mid"><span className="block h-1.5 rounded bg-secondary" style={{ width: `${Math.min(100, (memory / INPUT_BUDGET) * 100)}%` }} /></span>
                   <span className="whitespace-nowrap">{chat.length > 6 ? 'older chat summarised' : 'full chat'}</span>
-                  {chat.length > 0 && <button onClick={() => { setChat([]); setSummary(''); setPending(null); setErr('') }} className="cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-primary">Clear chat</button>}
+                  {chat.length > 0 && <button onClick={() => { setChat([]); setSummary(''); setPending(null); setAsking(null); setErr('') }} className="cursor-pointer border-0 bg-transparent p-0 text-xs font-bold text-primary">Clear chat</button>}
                 </div>
                 <form onSubmit={(e) => { e.preventDefault(); send(msg); setMsg('') }} className="flex min-h-[52px] items-center gap-2 rounded-full bg-surface-low pl-4 pr-1.5">
                   <label htmlFor="aimsg" className="sr-only">Message the AI assistant</label>

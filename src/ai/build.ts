@@ -17,6 +17,7 @@ export interface BuildSpec {
   policies?: string[]
   related?: string[]
   new_resources?: { title: string; category?: string }[]
+  edge_cases?: { case?: string; handled?: string }[]
   roles?: { name: string; does?: string; type?: string; tools?: string[] }[] | string[]
   stages?: {
     title?: string; short?: string; place?: string; text?: string
@@ -39,6 +40,7 @@ Reply ONLY with JSON in exactly this shape:
   "policies":["<library ids of policies that apply to the whole process>"],
   "related":["<library ids of related processes>"],
   "new_resources":[{"title":"<a form, document, guide or policy the process needs that is NOT in the library>","category":"form|client-doc|guide|policy"}],
+  "edge_cases":[{"case":"<what could go wrong or be different, plain words>","handled":"<exact label of the step or check that deals with it>"}],
   "roles":[{"name":"<role>","does":"<their part, a few words>","type":"person|agent"},
            {"name":"<AI agent name>","type":"agent","tools":["<tool, MCP server or API it uses>"]}],
   "stages":[
@@ -53,11 +55,44 @@ Requirements:
 - 4 to 7 roles. When AI does work, make it a role with "type":"agent" and list the tools it uses in "tools" (e.g. "Transcription API", "Client record system (MCP)", "Email API").
 - After an AI agent step, add a person check (decision) so a human reviews its work.
 - 5 to 7 stages in time order. Each stage has 3 to 5 steps, every step done by one of the roles.
-- At least 2 decisions (checks, consent, approval, quality review), each with a "no" path.
-- Cover consent, privacy, quality checks and record keeping when relevant (for example NDIS, health or client data).
-- Use generic tool names (e.g. "Session recording app", "Client record system") unless the user names a real one.
+- At least 3 decisions (checks, consent, approval, quality review), EACH with a "no" path that goes somewhere sensible (fix and re-check, ask for missing info, escalate).
+- EDGE CASES: think like an experienced process owner about what really goes wrong, and build steps/checks for them. Consider and include the ones that apply:
+  missing or wrong information · request rejected or not approved · nobody responds in time (reminder, then escalate to a named role) · the person/client says no or withdraws consent ·
+  AI agent fails, is unsure or gets it wrong (a person takes over) · urgent or high-risk case (faster path / who to tell) · cancelled or changed part-way · a system is down (manual fallback) ·
+  privacy breach or incident (link to incident process) · records not completed (follow-up before close).
+  List 5-8 of them in "edge_cases", each pointing to the step or check that handles it. Every edge case must be handled by a real step in "stages".
+- SYSTEMS: the organisation's INTERNAL SYSTEMS are listed. Put the exact system name in a stage's "systems" whenever a step there uses it. If a step needs a system nobody named, write "[confirm] <generic name>" so the owner can check.
+- Use the OWNER'S ANSWERS when given — they override your assumptions.
 - Do not include start or end steps — the app adds them from triggers and outcomes.
 - RESOURCES: a LIBRARY of existing forms, client documents, how-to guides, policies and related processes is given (id|category|title). For each step, put in "uses" the ids of the library items that step needs (0-3). Prefer library items. Only if something important is missing, add it to "new_resources" and use its exact title in "uses".`
+
+export const MIN_DECISIONS = 3
+export const MIN_EDGE_CASES = 4
+
+/** What the draft still misses: thin checks, checks with no "no" path, AI steps nobody reviews, too few edge cases. */
+export function edgeGaps(s?: BuildSpec): string[] {
+  if (!s?.stages?.length) return []
+  const steps = s.stages.flatMap((st) => st.steps ?? [])
+  const isDec = (x: { kind?: string; label?: string }) => x.kind === 'decision' || /\?\s*$/.test(x.label ?? '')
+  const decs = steps.filter(isDec)
+  const gaps: string[] = []
+  if (decs.length < MIN_DECISIONS) gaps.push(`only ${decs.length} checks — add at least ${MIN_DECISIONS}, each with a "no" path`)
+  const noPath = decs.filter((d) => !d.no).map((d) => `"${d.label}"`)
+  if (noPath.length) gaps.push(`these checks have no "no" path: ${noPath.join(', ')}`)
+  const agents = new Set((s.roles ?? []).filter((r) => typeof r !== 'string' && (r.type === 'agent' || r.tools?.length)).map((r) => (r as { name: string }).name.toLowerCase()))
+  steps.forEach((x, i) => {
+    if (x.role && agents.has(x.role.toLowerCase()) && !isDec(x)) {
+      const nextOne = steps[i + 1]
+      if (!nextOne || !(isDec(nextOne) && !agents.has((nextOne.role ?? '').toLowerCase()))) gaps.push(`AI step "${x.label}" has no person checking it straight after`)
+    }
+  })
+  const ec = (s.edge_cases ?? []).filter((e) => e?.case)
+  if (ec.length < MIN_EDGE_CASES) gaps.push(`only ${ec.length} edge cases listed — list ${MIN_EDGE_CASES}-8 (no response in time, rejected, missing info, consent withdrawn, AI unsure, system down, urgent case)`)
+  const labels = new Set(steps.map((x) => (x.label ?? '').toLowerCase().trim()))
+  const orphan = ec.filter((e) => e.handled && !labels.has(e.handled.toLowerCase().trim())).map((e) => `"${e.case}"`)
+  if (orphan.length > 2) gaps.push(`these edge cases don't point to a real step label: ${orphan.slice(0, 4).join(', ')}`)
+  return gaps.slice(0, 6)
+}
 
 export const MIN_STAGES = 4
 export const MIN_STEPS = 10
@@ -151,6 +186,7 @@ export function specToProcess(base: Process, spec: BuildSpec, lib: LibraryItem[]
     triggers: spec.triggers?.length ? spec.triggers : base.triggers,
     outcomes: spec.outcomes?.length ? spec.outcomes : base.outcomes,
     roles, stages, steps, edges, layout: {},
+    exceptions: (spec.edge_cases ?? []).filter((e) => e?.case).map((e) => ({ case: e.case!.trim(), handled: (e.handled ?? '').trim() })).slice(0, 10),
     needsCompleting: false,
   }
   // if the AI linked resources itself, trust it; otherwise match steps from the library automatically

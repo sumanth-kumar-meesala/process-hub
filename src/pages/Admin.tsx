@@ -13,7 +13,7 @@ import { INPUT_BUDGET, KEEP_MESSAGES, testGroq } from '@/ai/groq'
 import { cn } from '@/lib/utils'
 
 const MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
-type Tab = 'ai' | 'people' | 'processes' | 'library' | 'glossary'
+type Tab = 'ai' | 'people' | 'processes' | 'library' | 'systems' | 'glossary'
 
 export default function Admin() {
   const { persona } = useSession()
@@ -29,7 +29,7 @@ export default function Admin() {
       <AppHeader />
       <main className="mx-auto flex max-w-[1240px] flex-wrap items-start gap-6 px-4 pb-16 pt-4 sm:px-8">
         <nav aria-label="Admin" className="flex w-full max-w-[260px] flex-col gap-1 sm:w-auto sm:flex-[1_1_220px]">
-          {([['ai', 'AI assistant'], ['people', 'People & access'], ['processes', 'Processes'], ['library', 'Resource library'], ['glossary', 'Plain-language words']] as [Tab, string][]).map(([id, label]) => (
+          {([['ai', 'AI assistant'], ['people', 'People & access'], ['processes', 'Processes'], ['library', 'Resource library'], ['systems', 'Internal systems'], ['glossary', 'Plain-language words']] as [Tab, string][]).map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)} className={cn('h-12 cursor-pointer rounded-full border-0 px-4 text-left text-sm font-bold', tab === id ? 'bg-primary-container text-on-primary-container' : 'bg-transparent text-on-surface-variant hover:bg-surface-mid')}>{label}</button>
           ))}
         </nav>
@@ -38,6 +38,7 @@ export default function Admin() {
           {tab === 'people' && <People />}
           {tab === 'processes' && <Processes />}
           {tab === 'library' && <Library />}
+          {tab === 'systems' && <Systems />}
           {tab === 'glossary' && <Glossary />}
         </div>
       </main>
@@ -167,6 +168,47 @@ function Processes() {
         ))}
       </div>
       <div className="self-start"><ConfirmButton label="Reset to starter processes" question="Replace everything with the five starter processes?" confirmLabel="Reset" icon={<RotateCcw size={16} />} onConfirm={() => { resetToStarter(); setNote('Back to the five starter processes.') }} /></div>
+    </Card>
+  )
+}
+
+function Systems() {
+  const { systems, setSystems, processes } = useData()
+  const [nt, setNt] = useState({ name: '', purpose: '' })
+  const used = (name: string) => processes.filter((p) => p.stages.some((st) => st.systems.some((x) => x.toLowerCase() === name.toLowerCase()))).length
+  // systems named in processes but not in the list yet
+  const unlisted = [...new Set(processes.flatMap((p) => p.stages.flatMap((st) => st.systems)))]
+    .filter((x) => !/\[confirm\]/i.test(x) && !systems.some((y) => y.name.toLowerCase() === x.toLowerCase()))
+  const add = (name = nt.name, purpose = nt.purpose) => {
+    if (!name.trim()) return
+    setSystems([...systems.filter((x) => x.name.toLowerCase() !== name.trim().toLowerCase()), { name: name.trim(), purpose: purpose.trim() }])
+    setNt({ name: '', purpose: '' })
+  }
+  return (
+    <Card className="flex flex-col gap-4 rounded-[28px] p-7">
+      <h1 className="m-0 text-2xl font-extrabold">Internal systems</h1>
+      <p className="m-0 text-[13px] text-on-surface-variant">The apps your organisation really uses. When an owner asks the AI to build a process, it asks which of these are used for each part, and puts these exact names on the stages. Saying what each one is for helps it choose.</p>
+      <form onSubmit={(e) => { e.preventDefault(); add() }} className="grid grid-cols-[minmax(140px,200px)_1fr_auto] gap-2 rounded-[20px] bg-surface-low p-3 max-sm:grid-cols-1">
+        <input className={inputCls} placeholder="System name" value={nt.name} onChange={(e) => setNt({ ...nt, name: e.target.value })} aria-label="System name" />
+        <input className={inputCls} placeholder="What it's used for" value={nt.purpose} onChange={(e) => setNt({ ...nt, purpose: e.target.value })} aria-label="What it's used for" />
+        <Button type="submit" disabled={!nt.name.trim()}><Plus size={16} />Add</Button>
+      </form>
+      {unlisted.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-[16px] bg-[#FFF7E6] px-3 py-2.5 text-[13px]">
+          <span className="font-bold">Named in processes, not listed yet:</span>
+          {unlisted.slice(0, 10).map((x) => <button key={x} onClick={() => add(x, '')} className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-full border border-outline-variant bg-white px-2.5 text-xs font-semibold"><Plus size={12} />{x}</button>)}
+        </div>
+      )}
+      <div className="flex flex-col">
+        {systems.map((g) => (
+          <div key={g.name} className="flex items-center gap-3 border-b border-outline-variant py-2 last:border-0">
+            <span className="flex w-[160px] flex-none flex-col"><b className="text-sm">{g.name}</b><span className="text-[11px] text-on-surface-variant">{used(g.name) ? `in ${used(g.name)} process${used(g.name) > 1 ? 'es' : ''}` : 'not used yet'}</span></span>
+            <input className={cn(inputCls, 'flex-1')} defaultValue={g.purpose} placeholder="What it's used for" aria-label={`What ${g.name} is used for`}
+              onBlur={(e) => { const v = e.target.value.trim(); if (v !== g.purpose) setSystems(systems.map((x) => x.name === g.name ? { ...x, purpose: v } : x)) }} />
+            <Button variant="danger" size="icon" aria-label={`Remove ${g.name}`} onClick={() => setSystems(systems.filter((x) => x.name !== g.name))}><Trash2 size={16} /></Button>
+          </div>
+        ))}
+      </div>
     </Card>
   )
 }

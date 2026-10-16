@@ -120,6 +120,8 @@ export interface Process {
   ownerDetail?: OwnerDetail
   /** where the builder placed things, keyed by step id */
   layout?: Record<string, { x: number; y: number }>
+  /** "What if…?" — unusual situations and the step or check that handles each */
+  exceptions?: { case: string; handled: string }[]
   updatedAt: string
   seeded?: boolean
 }

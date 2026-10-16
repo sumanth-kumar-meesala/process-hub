@@ -411,6 +411,19 @@ function Overview({ proc }: { proc: Process }) {
           <div className="flex flex-wrap gap-2">{proc.roles.map((r) => <Tag key={r.id} color={r.color}>{r.name}</Tag>)}</div>
         </Card>
       </div>
+      {(proc.exceptions?.length ?? 0) > 0 && (
+        <Card className="flex flex-col gap-3">
+          <div className="flex items-center gap-2.5"><Undo2 size={22} className="text-[#EA580C]" aria-hidden /><h3 className="m-0 text-[17px] font-extrabold">What if…?</h3><span className="text-sm text-on-surface-variant">When things don't go to plan</span></div>
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-2.5">
+            {proc.exceptions!.map((x, k) => (
+              <div key={k} className="flex flex-col gap-1 rounded-[16px] bg-[#FFF7E6] px-3.5 py-3 text-sm">
+                <b><Terms text={x.case} /></b>
+                {x.handled && <span className="text-[13px] text-[#7A3A00]">→ <Terms text={x.handled} /></span>}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
       <div className="flex flex-col gap-3.5">
         <div className="flex flex-wrap items-center gap-3"><h3 className="m-0 text-xl font-extrabold">Resources</h3><span className="text-sm text-on-surface-variant">{groups.reduce((a, g) => a + g.items.length, 0)} documents, guides and links — from the shared library</span></div>
         {groups.length === 0 ? <Card className="text-sm text-on-surface-variant">No resources linked yet.</Card> : (

@@ -1,6 +1,7 @@
 import type { LibraryItem, Process } from '@/lib/types'
 import type { Op } from './ops'
-import { BUILD_SYSTEM, specStats, type BuildSpec } from './build'
+import { BUILD_SYSTEM, specStats, edgeGaps, type BuildSpec } from './build'
+import type { InternalSystem } from '@/data/systems'
 import { libraryOutline } from '@/lib/resources'
 
 /**
@@ -21,6 +22,8 @@ const MAX_OUTPUT_BUILD = 4500  // building a whole process (input stays ~1-2k, s
 export interface ChatMsg { role: 'user' | 'assistant'; content: string }
 
 /** Rough token estimate (≈4 characters per token for English). */
+const systemsList = (sys?: InternalSystem[]) => (sys ?? []).map((x) => `${x.name} — ${x.purpose}`).join('\n')
+
 export const estTokens = (s: string) => Math.ceil(s.length / 4)
 
 /** "Build / create / make a process…", or a still-empty draft → ask for a complete process. */
@@ -50,7 +53,9 @@ Rules:
 - Add a stage before any step that uses it, and give stages and steps short ids you reuse (s1, s2… / a1, a2…).
 - Chain steps with "after" so every step is connected; for a decision, use "after" for the "Yes" path and add a "connect" with label "No" for the other path.
 - Keep labels short. Use generic names (e.g. "Session recording app") unless the user names a real system, document or policy.
-- If the request is unclear, ask one question in "reply" and return "ops": [].`
+- If the request is unclear, ask one question in "reply" and return "ops": [].
+- EDGE CASES ("what's missing", "edge cases", "what if"): look for what the process doesn't handle yet — nobody responds in time, rejected/not approved, missing or wrong info, consent withdrawn, AI step unsure or wrong (person takes over), urgent case, cancelled part-way, system down, records not finished. Add a decision with a "No" connect plus the steps to handle each one that applies. In "reply" list what you added in a few words and what was already covered.
+- SYSTEMS: use the exact names from INTERNAL SYSTEMS in stage "systems". If you don't know which system the owner uses, ask in "reply".`
 
 const BUILD_HINT = `BUILD MODE: The user wants a COMPLETE process. Return everything in one reply:
 1) {"op":"clear_draft"} if the draft is empty or only has placeholders ("New process", "First stage", "Requester", "It starts").
@@ -78,14 +83,14 @@ export function foldHistory(history: ChatMsg[], prevSummary: string) {
   return { recent: history.slice(-KEEP_MESSAGES), summary }
 }
 
-export function buildMessages(p: Process, history: ChatMsg[], summary: string, build = false, library: LibraryItem[] = []) {
+export function buildMessages(p: Process, history: ChatMsg[], summary: string, build = false, library: LibraryItem[] = [], systems: InternalSystem[] = []) {
   let maxSteps = 80
   let recent = history
   const make = () => {
     const ctx = `${outline(p, maxSteps)}${summary ? `\nEARLIER REQUESTS (summary):\n${summary}` : ''}${library.length ? `\nLIBRARY (id|category|title):\n${libraryOutline(library.slice(0, maxSteps))}` : ''}`
     return [
       { role: 'system', content: SYSTEM },
-      { role: 'system', content: ctx },
+      { role: 'system', content: ctx + (systems.length ? `\nINTERNAL SYSTEMS: ${systems.map((x) => x.name).join('; ')}` : '') },
       ...(build ? [{ role: 'system', content: BUILD_HINT }] : []),
       ...recent.map((m) => ({ role: m.role, content: m.content.slice(0, 1500) })),
     ]
@@ -135,41 +140,86 @@ const tuning = (model: string): Record<string, unknown> => {
   return {}
 }
 
-export interface AskResult { reply: string; ops: Op[]; spec?: BuildSpec; tokens: number; summary: string; truncated: boolean }
+export interface AskResult { reply: string; ops: Op[]; spec?: BuildSpec; tokens: number; summary: string; truncated: boolean; gaps?: string[] }
 
-export async function askGroq(opts: { key: string; model: string; process: Process; history: ChatMsg[]; summary: string; library?: LibraryItem[]; signal?: AbortSignal }): Promise<AskResult> {
+export interface BuildOpts { key: string; model: string; process: Process; history: ChatMsg[]; summary: string; library?: LibraryItem[]; systems?: InternalSystem[]; signal?: AbortSignal
+  /** build a whole process from this request (+ the owner's answers), skipping the edit-ops mode */
+  build?: { request: string; answers?: string }
+}
+
+export async function askGroq(opts: BuildOpts): Promise<AskResult> {
   const { recent, summary } = foldHistory(opts.history, opts.summary)
   const last = recent[recent.length - 1]?.content ?? ''
+  if (opts.build) return buildWhole(opts, opts.build.request, summary, opts.build.answers)
   if (isBuildRequest(last, opts.process)) return buildWhole(opts, last, summary)
-  const { messages, tokens } = buildMessages(opts.process, recent, summary, false, opts.library)
+  const { messages, tokens } = buildMessages(opts.process, recent, summary, false, opts.library, opts.systems)
   const { text, truncated } = await callGroq(opts.key, { model: opts.model, messages, temperature: 0.2, max_tokens: MAX_OUTPUT, response_format: { type: 'json_object' }, ...tuning(opts.model) }, opts.signal)
   const json = parseJson(text)
   return { reply: String(json.reply ?? (truncated ? 'Here is what I managed before running out of room.' : 'Done.')), ops: Array.isArray(json.ops) ? json.ops : [], tokens, summary, truncated }
 }
 
 /** Whole-process build: one nested outline, checked for detail, with one automatic "make it fuller" retry. */
-async function buildWhole(opts: { key: string; model: string; library?: LibraryItem[]; signal?: AbortSignal }, request: string, summary: string): Promise<AskResult> {
+async function buildWhole(opts: { key: string; model: string; library?: LibraryItem[]; systems?: InternalSystem[]; signal?: AbortSignal }, request: string, summary: string, answers?: string): Promise<AskResult> {
   const messages: { role: string; content: string }[] = [
     { role: 'system', content: BUILD_SYSTEM },
+    ...(opts.systems?.length ? [{ role: 'system', content: `INTERNAL SYSTEMS (name — what it is for):\n${systemsList(opts.systems)}` }] : []),
     ...(opts.library?.length ? [{ role: 'system', content: `LIBRARY (id|category|title):\n${libraryOutline(opts.library.slice(0, 120))}` }] : []),
     ...(summary ? [{ role: 'system', content: `Earlier requests in this chat:\n${summary}` }] : []),
-    { role: 'user', content: request.slice(0, 2000) },
+    { role: 'user', content: request.slice(0, 2000) + (answers ? `\n\nOWNER'S ANSWERS:\n${answers.slice(0, 2500)}` : '') },
   ]
   const ask = () => callGroq(opts.key, { model: opts.model, messages, temperature: 0.3, max_tokens: MAX_OUTPUT_BUILD, response_format: { type: 'json_object' }, ...tuning(opts.model) }, opts.signal)
   let { text, truncated } = await ask()
   let json = parseBuild(text)
   let stats = specStats(json.process)
-  if (!stats.ok) {
-    // too thin (or cut off) — ask once more, telling the model exactly what was missing
+  let gaps = edgeGaps(json.process)
+  if (!stats.ok || gaps.length) {
+    // too thin, cut off, or edge cases missing — ask once more, saying exactly what to fix (one retry keeps us inside the rate limit)
+    const why = [
+      ...(!stats.ok ? [`not detailed enough (${stats.stages} stages, ${stats.steps} steps) — use 5-7 stages with 3-5 steps each`] : []),
+      ...gaps,
+    ]
     messages.push({ role: 'assistant', content: text.slice(0, 3000) })
-    messages.push({ role: 'user', content: `That is not detailed enough (${stats.stages} stages, ${stats.steps} steps). Return the COMPLETE process again in the same JSON shape with 5-7 stages, 3-5 steps in each stage, all roles, and at least 2 decisions. Keep step labels short so it fits.` })
+    messages.push({ role: 'user', content: `Improve it. Problems:\n- ${why.join('\n- ')}\nReturn the COMPLETE process again in the same JSON shape, keeping everything that was good. Keep step labels short so it fits.` })
     const second = await ask()
     const j2 = parseBuild(second.text)
-    if (specStats(j2.process).steps > stats.steps) { json = j2; text = second.text; truncated = second.truncated; stats = specStats(j2.process) }
+    const s2 = specStats(j2.process), g2 = edgeGaps(j2.process)
+    const better = s2.ok && (g2.length < gaps.length || s2.steps > stats.steps) || (!stats.ok && s2.steps > stats.steps)
+    if (better) { json = j2; text = second.text; truncated = second.truncated; stats = s2; gaps = g2 }
   }
   const tokens = messages.reduce((a, m) => a + estTokens(m.content) + 4, 0)
   if (!json.process || !stats.steps) return { reply: json.reply || "I couldn't build that one — try describing who does what, in a sentence or two.", ops: [], tokens, summary, truncated }
-  return { reply: json.reply || `Here's the full process: ${stats.stages} stages and ${stats.steps} steps.`, ops: [], spec: json.process, tokens, summary, truncated }
+  return { reply: json.reply || `Here's the full process: ${stats.stages} stages and ${stats.steps} steps.`, ops: [], spec: json.process, tokens, summary, truncated, gaps }
+}
+
+/* ---------- questions before building ---------- */
+export interface Question { q: string; why?: string; options: string[]; multi?: boolean }
+
+const CLARIFY_SYSTEM = `You help a process owner design a business process. BEFORE anything is built, ask the few questions whose answers change the design most.
+Ask 3 to 5 short questions in plain, friendly English. Each has 2-6 short answer options the owner can tap (they can also type their own).
+Cover, when the request doesn't already say:
+1) WHICH INTERNAL SYSTEMS are used for the key parts (e.g. where records are kept, where it is approved, how people are told). Use the exact names from INTERNAL SYSTEMS as options; add "Something else" when unsure. Set "multi": true.
+2) WHO approves or signs off, and whether anything needs a second check.
+3) The EDGE CASES that matter most for THIS process — e.g. what happens if nobody responds in time, if it is rejected, if information is missing, if consent is withdrawn, if an AI step gets it wrong, if it is urgent. Offer realistic handling options.
+4) Rules that apply (privacy, consent, NDIS or other standards, record keeping) only if relevant.
+Don't ask what the request already answers. Don't ask more than 5.
+Reply ONLY with JSON: {"reply":"<one friendly sentence, e.g. 'A few quick questions so I get your systems and the tricky cases right:'>","questions":[{"q":"","why":"<few words: why it matters>","options":["",""],"multi":false}]}`
+
+export async function clarifyBuild(opts: { key: string; model: string; request: string; systems?: InternalSystem[]; library?: LibraryItem[]; signal?: AbortSignal }): Promise<{ reply: string; questions: Question[] }> {
+  const lib = (opts.library ?? []).filter((x) => x.category === 'policy' || x.category === 'process').map((x) => x.title).join('; ')
+  const { text } = await callGroq(opts.key, {
+    model: opts.model, temperature: 0.3, max_tokens: 1200, response_format: { type: 'json_object' }, ...tuning(opts.model),
+    messages: [
+      { role: 'system', content: CLARIFY_SYSTEM },
+      { role: 'system', content: `INTERNAL SYSTEMS (name — what it is for):\n${systemsList(opts.systems) || '(none listed yet)'}${lib ? `\nPOLICIES & PROCESSES IN THE LIBRARY: ${lib}` : ''}` },
+      { role: 'user', content: opts.request.slice(0, 2000) },
+    ],
+  }, opts.signal)
+  const j = parseBuild(text) as { reply?: string; questions?: Question[] }
+  const questions = (Array.isArray(j.questions) ? j.questions : [])
+    .filter((x) => x && typeof x.q === 'string' && x.q.trim())
+    .map((x) => ({ q: x.q.trim(), why: x.why, multi: !!x.multi, options: (Array.isArray(x.options) ? x.options : []).map(String).filter(Boolean).slice(0, 6) }))
+    .slice(0, 5)
+  return { reply: j.reply || 'A few quick questions first:', questions }
 }
 
 function parseBuild(t: string): { reply?: string; process?: BuildSpec } {
@@ -224,7 +274,7 @@ export function aboutFacts(p: Process, lib: LibraryItem[]) {
   }).join('\n')
   const roles = p.roles.map((r) => `${r.name}${r.tools?.length ? ` (AI agent; tools: ${r.tools.join(', ')})` : ''}`).join('; ')
   const linked = (p.linkedIds ?? []).map(title).join('; ')
-  return `PROCESS: ${p.title}\nOWNER: ${p.owner}\nSUMMARY: ${p.summary}\nIN A NUTSHELL: ${p.nutshell}\nSTARTS WHEN: ${p.triggers.join('; ')}\nDONE WHEN: ${p.outcomes.join('; ')}\nROLES: ${roles}\n${stages}${linked ? `\nPOLICIES & RELATED: ${linked}` : ''}`.slice(0, 14000)
+  return `PROCESS: ${p.title}\nOWNER: ${p.owner}\nSUMMARY: ${p.summary}\nIN A NUTSHELL: ${p.nutshell}\nSTARTS WHEN: ${p.triggers.join('; ')}\nDONE WHEN: ${p.outcomes.join('; ')}\nROLES: ${roles}\n${stages}${linked ? `\nPOLICIES & RELATED: ${linked}` : ''}${p.exceptions?.length ? `\nWHAT IF: ${p.exceptions.map((x) => `${x.case} → ${x.handled}`).join('; ')}` : ''}`.slice(0, 14000)
 }
 
 export async function askAbout(opts: { key: string; model: string; process: Process; library: LibraryItem[]; history: ChatMsg[]; question: string; signal?: AbortSignal }) {
