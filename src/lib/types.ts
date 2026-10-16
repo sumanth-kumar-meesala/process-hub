@@ -10,6 +10,7 @@ export const PERSONAS: { id: Persona; label: string; blurb: string }[] = [
 
 /** What a stage island shows in 3D. 'auto' picks one from the stage's words. */
 export type SceneKind = 'auto' | 'home' | 'office' | 'calendar' | 'classroom' | 'records' | 'payment' | 'delivery' | 'ai' | 'generic'
+  | 'recording' | 'upload' | 'review' | 'approval' | 'database' | 'message' | 'alert' | 'consent' | 'archive' | 'handover' | 'phone' | 'report' | 'meeting' | 'clinic' | 'finish'
 
 export type RoleKind = 'person' | 'team' | 'agent' | 'system'
 /** kind 'agent' = an AI agent; tools are the MCP servers / APIs / apps it can use */
@@ -105,6 +106,8 @@ export interface Process {
   status: 'published' | 'draft'
   /** true when the owner still has to fill it in (only partial info was available) */
   needsCompleting: boolean
+  /** shown as a note on the process page, e.g. "drafted in Process Hub — owner to confirm" */
+  draftNote?: string
   audience?: string
   triggers: string[]
   outcomes: string[]

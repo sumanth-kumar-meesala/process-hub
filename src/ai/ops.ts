@@ -5,7 +5,7 @@ export type Op =
   | { op: 'clear_draft' }
   | { op: 'add_role'; name: string; kind?: 'person' | 'team' | 'agent' | 'system'; tools?: string[] }
   | { op: 'rename_role'; role: string; name: string }
-  | { op: 'add_stage'; id?: string; title: string; short?: string; place?: string; text?: string; systems?: string[]; docs?: string[] }
+  | { op: 'add_stage'; id?: string; title: string; short?: string; place?: string; text?: string; systems?: string[]; docs?: string[]; scene?: string }
   | { op: 'update_stage'; stage: string; title?: string; short?: string; place?: string; text?: string; systems?: string[]; docs?: string[] }
   | { op: 'add_step'; id?: string; label: string; role: string; stage: string; kind?: StepKind; after?: string }
   | { op: 'update_step'; step: string; label?: string; role?: string; stage?: string }
@@ -41,7 +41,7 @@ export function applyOps(src: Process, ops: Op[], lib: LibraryItem[] = []): { ne
         case 'rename_role': { const r = findRole(o.role); if (r) { r.name = o.name; notes.push(`~ role ${o.name}`) } break }
         case 'add_stage': {
           const id = o.id && !p.stages.some((x) => x.id === o.id) ? o.id : uid('s')
-          p.stages.push({ id, title: o.title, short: o.short || o.title.split(' ').slice(0, 3).join(' '), place: o.place || '', text: o.text || '', color: STAGE_COLORS[p.stages.length % STAGE_COLORS.length], systems: o.systems ?? [], docs: o.docs ?? [], roleIds: [], scene: 'auto' })
+          p.stages.push({ id, title: o.title, short: o.short || o.title.split(' ').slice(0, 3).join(' '), place: o.place || '', text: o.text || '', color: STAGE_COLORS[p.stages.length % STAGE_COLORS.length], systems: o.systems ?? [], docs: o.docs ?? [], roleIds: [], scene: ('recording|upload|ai|review|approval|database|message|alert|consent|archive|handover|phone|report|meeting|clinic|classroom|calendar|payment|delivery|home|office|records|finish'.split('|').includes(o.scene ?? '') ? o.scene : 'auto') as Process['stages'][number]['scene'] })
           notes.push(`+ stage ${o.short || o.title}`); break
         }
         case 'update_stage': {
@@ -52,8 +52,10 @@ export function applyOps(src: Process, ops: Op[], lib: LibraryItem[] = []): { ne
         }
         case 'add_step': {
           const role = ensureRole(o.role || 'Team')
-          let stage = findStage(o.stage)
-          if (!stage && o.stage) { const sid = uid('s'); p.stages.push({ id: sid, title: o.stage, short: o.stage, place: '', text: '', color: STAGE_COLORS[p.stages.length % STAGE_COLORS.length], systems: [], docs: [], roleIds: [], scene: 'auto' }); stage = p.stages[p.stages.length - 1] }
+          let stage: Process["stages"][number] | undefined = findStage(o.stage)
+          // an unknown id-like stage ref (e.g. "s_due8v4") means "the stage of the step before", not a new stage called that
+          if (!stage && o.stage && /^(s|st|stage)[_-][a-z0-9]{3,}$/i.test(o.stage.trim())) { const prevStep = o.after ? findStep(o.after) : undefined; stage = prevStep ? p.stages.find((x) => x.id === prevStep.stageId) : undefined }
+          if (!stage && o.stage && !/^(s|st|stage)[_-][a-z0-9]{3,}$/i.test(o.stage.trim())) { const sid = uid('s'); p.stages.push({ id: sid, title: o.stage, short: o.stage, place: '', text: '', color: STAGE_COLORS[p.stages.length % STAGE_COLORS.length], systems: [], docs: [], roleIds: [], scene: 'auto' }); stage = p.stages[p.stages.length - 1] }
           if (!stage) stage = p.stages[p.stages.length - 1]
           if (!role || !stage) break
           const id = o.id && !findStep(o.id) ? o.id : uid('st')

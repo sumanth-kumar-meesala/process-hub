@@ -39,7 +39,7 @@ Allowed ops (refer to roles/stages/steps by ids or names):
 {"op":"clear_draft"}  // wipes the canvas; use ONLY when building a new process over an empty or placeholder draft
 {"op":"add_role","name":"","kind":"person|agent","tools":["<for agents: MCP servers / APIs it uses>"]}
 {"op":"rename_role","role":"","name":""}
-{"op":"add_stage","id":"<short id>","title":"","short":"<2-3 words>","place":"<where it happens>","text":"<one plain sentence>","systems":[],"docs":[]}
+{"op":"add_stage","id":"<short id>","title":"","short":"<2-3 words>","place":"<where it happens>","text":"<one plain sentence>","systems":[],"docs":[],"scene":"<recording|upload|ai|review|approval|database|message|alert|consent|archive|handover|phone|report|meeting|clinic|classroom|calendar|payment|delivery|home|office|records|finish>"}
 {"op":"update_stage","stage":"","title":"","short":"","place":"","text":"","systems":[],"docs":[]}
 {"op":"add_step","id":"<short id>","label":"<verb first, max 5 words>","role":"","stage":"","kind":"step|decision|start|end","after":"<previous step id — this links them>"}
 {"op":"update_step","step":"","label":"","role":"","stage":""}

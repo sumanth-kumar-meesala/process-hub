@@ -705,8 +705,15 @@ type SetDraft = React.Dispatch<React.SetStateAction<Process>>
 type Commit = (fn: (d: Process) => Process) => void
 
 const SCENES: { id: SceneKind; label: string }[] = [
-  { id: 'auto', label: 'Automatic (from the words)' }, { id: 'home', label: 'Home' }, { id: 'office', label: 'Office' }, { id: 'calendar', label: 'Calendar / booking' },
-  { id: 'classroom', label: 'Training / session' }, { id: 'records', label: 'Records / systems' }, { id: 'payment', label: 'Payment' }, { id: 'delivery', label: 'Delivery' }, { id: 'ai', label: 'AI / automation' }, { id: 'generic', label: 'Simple building' },
+  { id: 'auto', label: 'Automatic (from the stage and its steps)' },
+  { id: 'recording', label: 'Recording (microphone)' }, { id: 'upload', label: 'Sending files (cloud)' }, { id: 'ai', label: 'AI does the work' },
+  { id: 'review', label: 'Checking / editing (clipboard)' }, { id: 'approval', label: 'Approval (tick + stamp)' }, { id: 'database', label: 'Saving to a record system' },
+  { id: 'message', label: 'Telling someone (envelope)' }, { id: 'phone', label: 'Phone call' }, { id: 'handover', label: 'Handing over' },
+  { id: 'meeting', label: 'Meeting / peer review' }, { id: 'clinic', label: 'Therapy / appointment' }, { id: 'classroom', label: 'Training' },
+  { id: 'calendar', label: 'Booking / scheduling' }, { id: 'consent', label: 'Consent / privacy (padlock)' }, { id: 'alert', label: 'Incident / exception' },
+  { id: 'report', label: 'Monitoring / reporting' }, { id: 'archive', label: 'Closing / deleting / removing access' }, { id: 'payment', label: 'Payment' },
+  { id: 'delivery', label: 'Delivery / equipment' }, { id: 'records', label: 'IT systems (servers)' }, { id: 'home', label: 'Home visit' },
+  { id: 'office', label: 'Office' }, { id: 'finish', label: 'Wrapping up (finish flag)' }, { id: 'generic', label: 'Simple building' },
 ]
 
 function StageEditor({ proc, stageId, setDraft, commit, onDeleted }: { proc: Process; stageId: string; setDraft: SetDraft; commit: Commit; onDeleted: () => void }) {

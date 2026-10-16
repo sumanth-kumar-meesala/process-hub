@@ -40,7 +40,13 @@ const stageOf = (p: Process, id?: string) => p.steps.find((s) => s.id === id)?.s
 export function useWalk(p: Process) {
   const key = `ph-walk-${p.id}`
   const [w, setW] = useState<WalkState>(() => {
-    try { const raw = localStorage.getItem(key); return raw ? { ...EMPTY, ...JSON.parse(raw), nonce: 0 } : EMPTY } catch { return EMPTY }
+    try {
+      const raw = localStorage.getItem(key)
+      const saved: WalkState = raw ? { ...EMPTY, ...JSON.parse(raw), nonce: 0 } : EMPTY
+      // the process changed since this walk was saved: start again
+      if (saved.current && !p.steps.some((x) => x.id === saved.current)) return EMPTY
+      return saved
+    } catch { return EMPTY }
   })
   useEffect(() => { try { localStorage.setItem(key, JSON.stringify(w)) } catch { /* private mode: keep it in memory */ } }, [key, w])
 

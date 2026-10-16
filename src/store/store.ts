@@ -6,6 +6,7 @@ import { SEED_LIBRARY } from '@/data/library'
 import { SEED_GLOSSARY, type Term } from '@/data/glossary'
 import { SEED_SYSTEMS, type InternalSystem } from '@/data/systems'
 import { autoAssign } from '@/lib/resources'
+import { fixStageNames } from '@/lib/derive'
 import type { LibraryItem, Persona, Process } from '@/lib/types'
 
 /** IndexedDB-backed storage: the app's own small database, kept in the browser. */
@@ -63,7 +64,7 @@ export const useData = create<DataState>()(
         processes: s.processes.map((p) => ({ ...p, linkedIds: (p.linkedIds ?? []).filter((x) => x !== id), steps: p.steps.map((st) => ({ ...st, resourceIds: (st.resourceIds ?? []).filter((x) => x !== id) })) })),
       })),
       upsert: (p) => setS((s) => {
-        const next = { ...p, updatedAt: new Date().toISOString() }
+        const next = { ...fixStageNames(p), updatedAt: new Date().toISOString() }
         const i = s.processes.findIndex((x) => x.id === p.id)
         const list = [...s.processes]
         if (i >= 0) list[i] = next; else list.push(next)
@@ -81,7 +82,7 @@ export const useData = create<DataState>()(
     }),
     {
       name: 'process-hub-data',
-      version: 5,
+      version: 8,
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ processes: s.processes, people: s.people, library: s.library, glossary: s.glossary, systems: s.systems }),
       // v2 adds the shared resource library: untouched starter processes get the new version,
@@ -90,6 +91,18 @@ export const useData = create<DataState>()(
         const st = (old ?? {}) as { processes?: Process[]; people?: Person[]; library?: LibraryItem[]; glossary?: Term[]; systems?: InternalSystem[] }
         if (version < 4 && !st.glossary) st.glossary = SEED_GLOSSARY
         if (version < 5 && !st.systems) st.systems = SEED_SYSTEMS
+        if (version < 6 && st.processes) st.processes = st.processes.map(fixStageNames)
+        // v8: the starter processes were reworked with full steps, checks, edge cases, systems and resources —
+        // replace them (a deleted one stays deleted) and add the new library items
+        if (version < 8) {
+          if (st.processes) st.processes = st.processes.map((p) => { const fresh = SEED.find((x) => x.id === p.id); return fresh && p.seeded ? { ...fresh, status: p.status } : p })
+          if (st.library) st.library = [...st.library, ...SEED_LIBRARY.filter((x) => !st.library!.some((y) => y.id === x.id))]
+        }
+        // v7: starter processes get the newer, more meaningful 3D looks
+        if (version < 7 && st.processes) st.processes = st.processes.map((p) => {
+          const fresh = SEED.find((x) => x.id === p.id)
+          return fresh && p.seeded ? { ...p, stages: p.stages.map((sg) => { const f = fresh.stages.find((x) => x.id === sg.id); return f ? { ...sg, scene: f.scene } : sg }) } : p
+        })
         // v3: starter processes and people take the placeholder names from the current starter data
         if (version < 3) {
           if (st.processes) st.processes = st.processes.map((p) => {

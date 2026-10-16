@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Terms } from '@/components/Terms'
 import { catOf, stepResources } from '@/lib/resources'
 import { tint, type Process } from '@/lib/types'
-import { roleKind } from '@/lib/derive'
+import { roleKind, sysLabel } from '@/lib/derive'
 import { useData } from '@/store/store'
 import type { useWalk } from '@/lib/walk'
 
@@ -64,7 +64,7 @@ export function WalkCard({ proc, w, onClose }: { proc: Process; w: W; onClose: (
                 {role && <span className="text-[13px] font-semibold text-on-surface-variant">{roleKind(role) === 'agent' ? '🤖 Done automatically by ' : 'Done by '}{role.name}</span>}
               </div>
             </div>
-            {stage?.systems.length ? <span className="text-[13px] text-on-surface-variant">Usually in <Terms text={stage.systems.join(', ')} className="font-semibold text-on-surface" /></span> : null}
+            {stage?.systems.length ? <span className="text-[13px] text-on-surface-variant">Usually in <Terms text={stage.systems.map(sysLabel).join(', ')} className="font-semibold text-on-surface" /></span> : null}
             {res.length > 0 && (
               <div className="flex flex-col gap-1.5"><span className="lbl">You'll need</span>
                 {res.map((it) => <a key={it.id} href={it.url || '#'} target={it.url ? '_blank' : undefined} rel="noreferrer" onClick={(e) => { if (!it.url) e.preventDefault() }}

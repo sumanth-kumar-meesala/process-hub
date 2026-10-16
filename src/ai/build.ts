@@ -1,4 +1,6 @@
-import { ROLE_COLORS, STAGE_COLORS, uid, type LibraryItem, type Process, type ResourceCategory, type Step, type Edge } from '@/lib/types'
+import { ROLE_COLORS, STAGE_COLORS, uid, type LibraryItem, type Process, type ResourceCategory, type SceneKind, type Step, type Edge } from '@/lib/types'
+
+const SCENES = 'recording|upload|ai|review|approval|database|message|alert|consent|archive|handover|phone|report|meeting|clinic|classroom|calendar|payment|delivery|home|office|records|finish'.split('|')
 import { autoAssign } from '@/lib/resources'
 
 /**
@@ -20,7 +22,7 @@ export interface BuildSpec {
   edge_cases?: { case?: string; handled?: string }[]
   roles?: { name: string; does?: string; type?: string; tools?: string[] }[] | string[]
   stages?: {
-    title?: string; short?: string; place?: string; text?: string
+    title?: string; short?: string; place?: string; text?: string; scene?: string
     systems?: string[]; docs?: string[]
     steps?: { label?: string; role?: string; kind?: string; no?: string; uses?: string[] }[]
   }[]
@@ -44,7 +46,7 @@ Reply ONLY with JSON in exactly this shape:
   "roles":[{"name":"<role>","does":"<their part, a few words>","type":"person|agent"},
            {"name":"<AI agent name>","type":"agent","tools":["<tool, MCP server or API it uses>"]}],
   "stages":[
-   {"title":"<what happens in this phase>","short":"<2-3 words>","place":"<where it happens>","text":"<one or two plain sentences>",
+   {"title":"<what happens in this phase>","short":"<2-3 words>","place":"<where it happens>","text":"<one or two plain sentences>","scene":"<the picture that best shows this stage: recording|upload|ai|review|approval|database|message|alert|consent|archive|handover|phone|report|meeting|clinic|classroom|calendar|payment|delivery|home|office|records|finish>",
     "systems":["<app or tool used>"],"docs":["<form, record or template used>"],
     "steps":[
       {"label":"<verb first, max 6 words>","role":"<one of the roles>","uses":["<library id or new resource title>"]},
@@ -62,6 +64,7 @@ Requirements:
   privacy breach or incident (link to incident process) · records not completed (follow-up before close).
   List 5-8 of them in "edge_cases", each pointing to the step or check that handles it. Every edge case must be handled by a real step in "stages".
 - SYSTEMS: the organisation's INTERNAL SYSTEMS are listed. Put the exact system name in a stage's "systems" whenever a step there uses it. If a step needs a system nobody named, write "[confirm] <generic name>" so the owner can check.
+- SCENE: pick the picture that shows what really happens in the stage (recording = audio/sessions recorded, upload = files sent to a system or AI, ai = AI does the work, review = someone checks or edits, approval = sign-off, database = saved to a record system, message = someone is told or emailed, alert = incidents/exceptions/escalation, consent = consent/privacy, archive = closing/deleting/removing access, handover = work passed to someone, phone = calls, report = monitoring/reporting, meeting = discussion/peer review, clinic = therapy or client appointment, classroom = training, calendar = booking, finish = wrap-up). Use different pictures for different stages where you can.
 - Use the OWNER'S ANSWERS when given — they override your assumptions.
 - Do not include start or end steps — the app adds them from triggers and outcomes.
 - RESOURCES: a LIBRARY of existing forms, client documents, how-to guides, policies and related processes is given (id|category|title). For each step, put in "uses" the ids of the library items that step needs (0-3). Prefer library items. Only if something important is missing, add it to "new_resources" and use its exact title in "uses".`
@@ -143,7 +146,7 @@ export function specToProcess(base: Process, spec: BuildSpec, lib: LibraryItem[]
     const title = st.title || st.short || `Stage ${i + 1}`
     stages.push({
       id: sid, title, short: st.short || title.split(' ').slice(0, 3).join(' '), place: st.place || '', text: st.text || '',
-      color: STAGE_COLORS[i % STAGE_COLORS.length], systems: (st.systems ?? []).filter(Boolean), docs: (st.docs ?? []).filter(Boolean), roleIds: [], scene: 'auto',
+      color: STAGE_COLORS[i % STAGE_COLORS.length], systems: (st.systems ?? []).filter(Boolean), docs: (st.docs ?? []).filter(Boolean), roleIds: [], scene: SCENES.includes(st.scene as SceneKind) ? (st.scene as SceneKind) : 'auto',
     })
     ;(st.steps ?? []).forEach((x, j) => {
       if (!x.label) return

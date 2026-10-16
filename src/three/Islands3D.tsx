@@ -4,7 +4,7 @@ import { ContactShadows, Float, Html, Line, OrbitControls, QuadraticBezierLine }
 import * as THREE from 'three'
 import type { Process, Role } from '@/lib/types'
 import { tint } from '@/lib/types'
-import { loopsOf, roleKind, sceneFor, stageRoles } from '@/lib/derive'
+import { loopsOf, roleKind, sceneFor, stageRoles, sysLabel, sysUnsure } from '@/lib/derive'
 
 /* ---------- small building blocks ---------- */
 const M = ({ c, e = 0 }: { c: string; e?: number }) => <meshStandardMaterial color={c} roughness={0.78} metalness={0.02} emissive={c} emissiveIntensity={e} />
@@ -136,8 +136,349 @@ function AiCore({ color }: { color: string }) {
 }
 
 /* ---------- island scenery, chosen from what the stage is about ---------- */
+/* ---------- props that show what happens on an island ---------- */
+const Cyl = ({ p, r, h, c, seg = 24, rot, e = 0 }: { p: V3; r: number | [number, number]; h: number; c: string; seg?: number; rot?: V3; e?: number }) => (
+  <mesh position={p} rotation={rot}><cylinderGeometry args={[Array.isArray(r) ? r[0] : r, Array.isArray(r) ? r[1] : r, h, seg]} /><M c={c} e={e} /></mesh>
+)
+const Tick = ({ p, s = 1, c = '#16A34A', rot }: { p: V3; s?: number; c?: string; rot?: V3 }) => (
+  <group position={p} scale={s} rotation={rot}>
+    <B p={[-0.09, -0.03, 0]} s={[0.07, 0.2, 0.04]} c={c} r={[0, 0, 0.75]} />
+    <B p={[0.08, 0.05, 0]} s={[0.07, 0.38, 0.04]} c={c} r={[0, 0, -0.6]} />
+  </group>
+)
+
+/** A microphone on a stand with sound rings, and a recorder with a red light. */
+function RecordingProp({ color }: { color: string }) {
+  const rings = useRef<THREE.Group>(null)
+  const dot = useRef<THREE.MeshStandardMaterial>(null)
+  useFrame(({ clock }) => {
+    rings.current?.children.forEach((c, i) => {
+      const t = (clock.elapsedTime * 0.6 + i / 3) % 1
+      c.scale.setScalar(0.6 + t * 1.4); ((c as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = 0.7 * (1 - t)
+    })
+    if (dot.current) dot.current.emissiveIntensity = Math.sin(clock.elapsedTime * 4) > 0 ? 1.2 : 0.2
+  })
+  return (
+    <group position={[-0.5, 0, -0.5]}>
+      <Cyl p={[0, 0.03, 0]} r={0.4} h={0.06} c="#334155" />
+      <Cyl p={[0, 0.7, 0]} r={0.04} h={1.3} c="#64748B" seg={10} />
+      <Cyl p={[0, 1.42, 0]} r={0.2} h={0.36} c="#1E293B" />
+      <mesh position={[0, 1.62, 0]}><sphereGeometry args={[0.21, 18, 14]} /><M c={tint(color, 0.35)} /></mesh>
+      <group ref={rings} position={[0, 1.5, 0]} rotation={[0, Math.PI / 4, 0]}>
+        {[0, 1, 2].map((i) => <mesh key={i}><torusGeometry args={[0.45, 0.025, 8, 36]} /><meshBasicMaterial color={color} transparent opacity={0.5} /></mesh>)}
+      </group>
+      <B p={[1.1, 0.2, 0.6]} s={[0.75, 0.4, 0.5]} c="#F8FAFC" />
+      <mesh position={[0.92, 0.42, 0.6]}><sphereGeometry args={[0.08, 12, 10]} /><meshStandardMaterial ref={dot} color="#EF4444" emissive="#EF4444" emissiveIntensity={1} /></mesh>
+      <B p={[1.2, 0.41, 0.6]} s={[0.35, 0.02, 0.3]} c={color} />
+    </group>
+  )
+}
+
+/** A file going up to a cloud. */
+function UploadProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.4, 0, -0.5]}>
+      <B p={[0, 0.35, 0]} s={[0.55, 0.7, 0.06]} c="#FFFFFF" />
+      {[0.5, 0.38, 0.26].map((y) => <B key={y} p={[0, y, 0.035]} s={[0.36, 0.04, 0.01]} c={tint(color, 0.5)} />)}
+      <Float speed={2.2} floatIntensity={0.8} rotationIntensity={0}>
+        <group position={[0, 0.98, 0]}>
+          <Cyl p={[0, 0, 0]} r={0.06} h={0.4} c={color} seg={10} />
+          <mesh position={[0, 0.3, 0]}><coneGeometry args={[0.17, 0.25, 16]} /><M c={color} /></mesh>
+        </group>
+      </Float>
+      <group position={[0.1, 1.75, 0]} scale={0.85}>
+        {[[-0.35, 0, 0, 0.32], [0.05, 0.12, 0, 0.42], [0.45, 0, 0, 0.3], [0.05, -0.08, 0.15, 0.3]].map(([x, y, z, r], i) => (
+          <mesh key={i} position={[x, y, z]}><sphereGeometry args={[r, 18, 14]} /><M c="#F8FAFC" /></mesh>
+        ))}
+      </group>
+    </group>
+  )
+}
+
+/** A clipboard with a checklist and a magnifying glass. */
+function ReviewProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.5, 0, -0.6]}>
+      <group rotation={[-0.18, 0, 0]} position={[0, 0.85, 0]}>
+        <B p={[0, 0, 0]} s={[1.1, 1.5, 0.08]} c="#B45309" />
+        <B p={[0, -0.05, 0.05]} s={[0.95, 1.25, 0.02]} c="#FFFFFF" />
+        <B p={[0, 0.72, 0.06]} s={[0.4, 0.14, 0.06]} c="#94A3B8" />
+        {[0.35, 0.05, -0.25].map((y, i) => (
+          <group key={y}>
+            <B p={[-0.3, y, 0.07]} s={[0.16, 0.16, 0.01]} c={i < 2 ? '#DCFCE7' : '#F1F5F9'} />
+            {i < 2 && <Tick p={[-0.3, y, 0.08]} s={0.45} />}
+            <B p={[0.12, y, 0.07]} s={[0.5, 0.05, 0.01]} c="#CBD5E1" />
+          </group>
+        ))}
+      </group>
+      <group position={[1.05, 0.75, 0.75]} rotation={[0.3, -0.6, 0.5]}>
+        <mesh><torusGeometry args={[0.3, 0.06, 10, 28]} /><M c={color} /></mesh>
+        <mesh><circleGeometry args={[0.28, 24]} /><meshStandardMaterial color="#BAE6FD" transparent opacity={0.55} side={THREE.DoubleSide} /></mesh>
+        <Cyl p={[0, -0.5, 0]} r={0.05} h={0.45} c="#334155" seg={10} />
+      </group>
+    </group>
+  )
+}
+
+/** A document with a big green "approved" tick and a stamp. */
+function ApprovalProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.5, 0, -0.6]}>
+      <B p={[0, 0.8, 0]} s={[1.05, 1.45, 0.06]} c="#FFFFFF" />
+      {[1.3, 1.15, 1.0, 0.85].map((y) => <B key={y} p={[0, y, 0.035]} s={[0.75, 0.05, 0.01]} c="#CBD5E1" />)}
+      <mesh position={[0.1, 0.45, 0.05]}><circleGeometry args={[0.3, 28]} /><M c="#16A34A" /></mesh>
+      <Tick p={[0.1, 0.45, 0.07]} s={0.9} c="#FFFFFF" />
+      <group position={[1.1, 0, 0.7]}>
+        <Cyl p={[0, 0.1, 0]} r={0.32} h={0.2} c={color} />
+        <Cyl p={[0, 0.35, 0]} r={0.08} h={0.35} c="#7C2D12" seg={10} />
+        <mesh position={[0, 0.6, 0]}><sphereGeometry args={[0.16, 14, 12]} /><M c="#7C2D12" /></mesh>
+      </group>
+    </group>
+  )
+}
+
+/** Stacked database discs: information saved and kept. */
+function DatabaseProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.5, 0, -0.5]}>
+      {[0, 1, 2].map((i) => (
+        <group key={i} position={[0, 0.25 + i * 0.48, 0]}>
+          <Cyl p={[0, 0, 0]} r={0.62} h={0.4} c={i === 2 ? color : tint(color, 0.55 - i * 0.12)} seg={32} />
+          <mesh position={[0, 0.21, 0]} rotation={[-Math.PI / 2, 0, 0]}><ringGeometry args={[0.4, 0.46, 32]} /><meshBasicMaterial color="#FFFFFF" transparent opacity={0.6} /></mesh>
+          <mesh position={[0.44, 0, 0.44]}><sphereGeometry args={[0.05, 10, 8]} /><meshBasicMaterial color="#4ADE80" /></mesh>
+        </group>
+      ))}
+      <group position={[1.2, 0, 0.55]}>
+        <B p={[0, 0.5, 0]} s={[0.08, 0.6, 0.3]} c="#E2E8F0" />
+        <B p={[0.02, 0.85, 0]} s={[0.05, 0.08, 0.6]} c="#334155" />
+        <B p={[0, 0.03, 0]} s={[0.4, 0.06, 0.4]} c="#94A3B8" />
+      </group>
+    </group>
+  )
+}
+
+/** An envelope and a mailbox: someone is told or sent something. */
+function MessageProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.5, 0, -0.5]}>
+      <Float speed={2} floatIntensity={0.5} rotationIntensity={0.15}>
+        <group position={[0, 1.0, 0]} rotation={[0, Math.PI / 4, 0]}>
+          <B p={[0, 0, 0]} s={[1.2, 0.8, 0.08]} c="#FFFFFF" />
+          <B p={[-0.3, 0.12, 0.05]} s={[0.72, 0.06, 0.01]} c={color} r={[0, 0, -0.58]} />
+          <B p={[0.3, 0.12, 0.05]} s={[0.72, 0.06, 0.01]} c={color} r={[0, 0, 0.58]} />
+          <mesh position={[0.42, 0.28, 0.06]}><circleGeometry args={[0.1, 16]} /><meshBasicMaterial color="#EF4444" /></mesh>
+        </group>
+      </Float>
+      <group position={[1.15, 0, 0.6]}>
+        <Cyl p={[0, 0.35, 0]} r={0.05} h={0.7} c="#475569" seg={8} />
+        <B p={[0, 0.85, 0]} s={[0.36, 0.32, 0.55]} c={color} />
+        <Cyl p={[0, 1.01, 0]} r={0.18} h={0.55} c={color} rot={[Math.PI / 2, 0, 0]} />
+        <B p={[0.21, 1.0, 0.1]} s={[0.03, 0.3, 0.08]} c="#EF4444" />
+      </group>
+    </group>
+  )
+}
+
+/** A warning sign, cones and a flashing light: something went wrong or needs escalating. */
+function AlertProp() {
+  const light = useRef<THREE.MeshStandardMaterial>(null)
+  useFrame(({ clock }) => { if (light.current) light.current.emissiveIntensity = Math.sin(clock.elapsedTime * 6) > 0 ? 1.4 : 0.15 })
+  return (
+    <group position={[-0.5, 0, -0.5]}>
+      <Cyl p={[0, 0.5, 0]} r={0.04} h={1} c="#475569" seg={8} />
+      <group position={[0, 1.25, 0.03]} rotation={[0, Math.PI / 4, 0]}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.62, 0.62, 0.06, 3]} /><M c="#FBBF24" /></mesh>
+        <B p={[0, 0.04, 0.04]} s={[0.08, 0.32, 0.02]} c="#151A25" />
+        <B p={[0, -0.22, 0.04]} s={[0.08, 0.08, 0.02]} c="#151A25" />
+      </group>
+      {[[0.95, 0.55], [1.35, -0.1]].map(([x, z], i) => (
+        <group key={i} position={[x, 0, z]}>
+          <B p={[0, 0.03, 0]} s={[0.42, 0.06, 0.42]} c="#EA580C" />
+          <mesh position={[0, 0.33, 0]}><coneGeometry args={[0.17, 0.6, 18]} /><M c="#F97316" /></mesh>
+          <Cyl p={[0, 0.33, 0]} r={[0.09, 0.12]} h={0.1} c="#FFFFFF" />
+        </group>
+      ))}
+      <group position={[-0.2, 0, 1.1]}>
+        <Cyl p={[0, 0.08, 0]} r={0.22} h={0.16} c="#334155" />
+        <mesh position={[0, 0.3, 0]}><sphereGeometry args={[0.18, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2]} /><meshStandardMaterial ref={light} color="#EF4444" emissive="#EF4444" emissiveIntensity={1} /></mesh>
+      </group>
+    </group>
+  )
+}
+
+/** A padlock and a signed form: consent, privacy and security. */
+function ConsentProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.5, 0, -0.5]}>
+      <B p={[0, 0.45, 0]} s={[0.95, 0.85, 0.45]} c="#F59E0B" />
+      <mesh position={[0, 0.88, 0]}><torusGeometry args={[0.32, 0.08, 10, 24, Math.PI]} /><M c="#94A3B8" /></mesh>
+      <Cyl p={[0, 0.88, 0]} r={0.08} h={0.01} c="#94A3B8" />
+      <mesh position={[0, 0.5, 0.23]}><circleGeometry args={[0.1, 16]} /><M c="#78350F" /></mesh>
+      <B p={[0, 0.36, 0.23]} s={[0.06, 0.2, 0.01]} c="#78350F" />
+      <group position={[1.15, 0.03, 0.65]} rotation={[-Math.PI / 2, 0, 0.3]}>
+        <B p={[0, 0, 0]} s={[0.7, 0.9, 0.03]} c="#FFFFFF" />
+        {[0.25, 0.1, -0.05].map((y) => <B key={y} p={[0, y, 0.02]} s={[0.5, 0.04, 0.01]} c="#CBD5E1" />)}
+        <B p={[0, -0.28, 0.02]} s={[0.45, 0.03, 0.01]} c={color} r={[0, 0, 0.15]} />
+      </group>
+      <Cyl p={[1.45, 0.08, 0.45]} r={0.04} h={0.6} c={color} seg={8} rot={[0, 0, Math.PI / 2.4]} />
+    </group>
+  )
+}
+
+/** Archive boxes and a bin: closing, removing access, deleting what's no longer needed. */
+function ArchiveProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.5, 0, -0.5]}>
+      {[[0, 0, 0], [0.75, 0, 0.05], [0.35, 0.55, 0]].map(([x, y, z], i) => (
+        <group key={i} position={[x, y, z]}>
+          <B p={[0, 0.27, 0]} s={[0.7, 0.5, 0.55]} c="#D9A066" />
+          <B p={[0, 0.54, 0]} s={[0.74, 0.08, 0.59]} c="#C98A4E" />
+          <B p={[0, 0.3, 0.28]} s={[0.3, 0.14, 0.01]} c="#FFFFFF" />
+        </group>
+      ))}
+      <group position={[0.4, 0, 1.15]}>
+        <Cyl p={[0, 0.3, 0]} r={[0.3, 0.24]} h={0.6} c={color} />
+        <Cyl p={[0, 0.62, 0]} r={0.33} h={0.06} c={tint(color, 0.5)} />
+        <B p={[0, 0.7, 0]} s={[0.2, 0.06, 0.06]} c={tint(color, 0.5)} />
+      </group>
+    </group>
+  )
+}
+
+/** Two people passing a package: handing work over. */
+function HandoverProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.4, 0, -0.5]}>
+      <group rotation={[0, Math.PI / 2, 0]}><Person p={[0, 0, -0.55]} color="#2563EB" scale={1.15} /></group>
+      <group rotation={[0, -Math.PI / 2, 0]}><Person p={[0, 0, -0.55]} color="#DB2777" scale={1.15} /></group>
+      <Float speed={2.5} floatIntensity={0.4} rotationIntensity={0}>
+        <group position={[0, 0.85, 0]}>
+          <B p={[0, 0, 0]} s={[0.42, 0.32, 0.36]} c="#D9A066" />
+          <B p={[0, 0, 0]} s={[0.44, 0.06, 0.38]} c={color} />
+          <B p={[0, 0, 0]} s={[0.06, 0.34, 0.38]} c={color} />
+        </group>
+      </Float>
+      <mesh position={[0, 1.45, 0]} rotation={[0, Math.PI / 4, Math.PI / 2]}><coneGeometry args={[0.12, 0.25, 3]} /><M c={color} /></mesh>
+    </group>
+  )
+}
+
+/** A phone with a speech bubble: someone is contacted. */
+function PhoneProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.4, 0, -0.5]} rotation={[0, Math.PI / 4, 0]}>
+      <B p={[0, 0.8, 0]} s={[0.8, 1.5, 0.12]} c="#1E293B" />
+      <mesh position={[0, 0.82, 0.065]}><planeGeometry args={[0.66, 1.2]} /><M c={tint(color, 0.45)} e={0.25} /></mesh>
+      <Cyl p={[0, 1.15, 0.07]} r={0.12} h={0.02} c="#FFFFFF" rot={[Math.PI / 2, 0, 0]} />
+      <B p={[0, 0.72, 0.07]} s={[0.4, 0.06, 0.01]} c="#FFFFFF" />
+      <B p={[0, 0.58, 0.07]} s={[0.3, 0.06, 0.01]} c="#FFFFFF" />
+      <Float speed={2.4} floatIntensity={0.6} rotationIntensity={0}>
+        <group position={[0.75, 1.75, 0]}>
+          <mesh scale={[1, 0.7, 0.4]}><sphereGeometry args={[0.38, 18, 14]} /><M c="#FFFFFF" /></mesh>
+          <mesh position={[-0.22, -0.28, 0]} rotation={[0, 0, 0.6]}><coneGeometry args={[0.08, 0.2, 8]} /><M c="#FFFFFF" /></mesh>
+          {[-0.14, 0, 0.14].map((x) => <mesh key={x} position={[x, 0, 0.16]}><sphereGeometry args={[0.045, 8, 6]} /><meshBasicMaterial color={color} /></mesh>)}
+        </group>
+      </Float>
+    </group>
+  )
+}
+
+/** A board with a bar chart: checking how it's going and reporting. */
+function ReportProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.4, 0, -0.7]}>
+      <Cyl p={[-0.65, 0.5, 0]} r={0.04} h={1} c="#64748B" seg={8} />
+      <Cyl p={[0.65, 0.5, 0]} r={0.04} h={1} c="#64748B" seg={8} />
+      <B p={[0, 1.3, 0]} s={[1.7, 1.15, 0.08]} c="#FFFFFF" />
+      {[0.35, 0.6, 0.45, 0.85].map((h, i) => <B key={i} p={[-0.52 + i * 0.35, 0.83 + h / 2, 0.05]} s={[0.22, h, 0.03]} c={i === 3 ? color : tint(color, 0.45)} />)}
+      <B p={[0, 0.8, 0.05]} s={[1.4, 0.03, 0.02]} c="#94A3B8" />
+      <Tick p={[0.65, 1.68, 0.06]} s={0.5} />
+    </group>
+  )
+}
+
+/** A round table with people around it: a meeting or a second opinion. */
+function MeetingProp({ color }: { color: string }) {
+  return (
+    <group position={[-0.3, 0, -0.4]}>
+      <Cyl p={[0, 0.25, 0]} r={0.08} h={0.5} c="#64748B" seg={10} />
+      <Cyl p={[0, 0.52, 0]} r={0.62} h={0.07} c="#F8FAFC" seg={32} />
+      <B p={[-0.15, 0.57, 0.1]} s={[0.35, 0.02, 0.25]} c="#FFFFFF" r={[0, 0.4, 0]} />
+      <B p={[0.2, 0.57, -0.1]} s={[0.3, 0.02, 0.22]} c={tint(color, 0.5)} r={[0, -0.3, 0]} />
+      {[0, 1, 2].map((i) => {
+        const a = (i / 3) * Math.PI * 2 + 0.4
+        return <Person key={i} p={[Math.cos(a) * 0.95, 0, Math.sin(a) * 0.95]} color={['#2563EB', color, '#16A34A'][i]} seated />
+      })}
+    </group>
+  )
+}
+
+/** A calm therapy room: two armchairs, a small table and a plant. */
+function ClinicProp({ color }: { color: string }) {
+  const chair = (p: V3, rot: number, c: string) => (
+    <group position={p} rotation={[0, rot, 0]}>
+      <B p={[0, 0.22, 0]} s={[0.6, 0.24, 0.55]} c={c} />
+      <B p={[0, 0.5, -0.24]} s={[0.6, 0.55, 0.12]} c={c} />
+      <B p={[-0.3, 0.38, 0]} s={[0.1, 0.22, 0.55]} c={tint(c, 0.6)} />
+      <B p={[0.3, 0.38, 0]} s={[0.1, 0.22, 0.55]} c={tint(c, 0.6)} />
+    </group>
+  )
+  return (
+    <group position={[-0.4, 0, -0.4]}>
+      <Cyl p={[0, 0.015, 0]} r={1.1} h={0.03} c={tint(color, 0.3)} seg={36} />
+      {chair([-0.65, 0, -0.35], Math.PI / 4, color)}
+      {chair([0.65, 0, 0.35], Math.PI + Math.PI / 4, '#94A3B8')}
+      <Cyl p={[0.05, 0.22, -0.05]} r={0.22} h={0.04} c="#FFFFFF" />
+      <Cyl p={[0.05, 0.11, -0.05]} r={0.04} h={0.2} c="#64748B" seg={8} />
+      <group position={[-0.95, 0, 0.75]}>
+        <Cyl p={[0, 0.15, 0]} r={[0.17, 0.13]} h={0.3} c="#C2410C" />
+        <mesh position={[0, 0.5, 0]}><sphereGeometry args={[0.3, 14, 12]} /><M c="#16A34A" /></mesh>
+        <mesh position={[0.15, 0.72, 0.05]}><sphereGeometry args={[0.18, 12, 10]} /><M c="#22C55E" /></mesh>
+      </group>
+    </group>
+  )
+}
+
+/** A finish flag and a ticked box: wrapping up. */
+function FinishProp({ color }: { color: string }) {
+  const flag = useRef<THREE.Group>(null)
+  useFrame(({ clock }) => { if (flag.current) flag.current.rotation.y = Math.sin(clock.elapsedTime * 2) * 0.15 })
+  return (
+    <group position={[-0.5, 0, -0.5]}>
+      <Cyl p={[0, 0.9, 0]} r={0.04} h={1.8} c="#475569" seg={8} />
+      <group ref={flag} position={[0, 1.55, 0]}>
+        {[0, 1, 2, 3].flatMap((c) => [0, 1].map((r) => <B key={`${c}${r}`} p={[0.12 + c * 0.17, -r * 0.17, 0]} s={[0.17, 0.17, 0.02]} c={(c + r) % 2 ? '#FFFFFF' : '#151A25'} />))}
+      </group>
+      <group position={[1.1, 0, 0.6]}>
+        <B p={[0, 0.3, 0]} s={[0.6, 0.6, 0.6]} c={color} />
+        <Tick p={[0, 0.32, 0.31]} s={1.1} c="#FFFFFF" />
+      </group>
+    </group>
+  )
+}
+
+const NEW_PROPS = new Set(['recording', 'upload', 'review', 'approval', 'database', 'message', 'alert', 'consent', 'archive', 'handover', 'phone', 'report', 'meeting', 'clinic', 'finish'])
 function Scenery({ kind, color }: { kind: string; color: string }) {
+  // the newer props are drawn a bit bigger so they read clearly next to the people
+  return NEW_PROPS.has(kind) ? <group scale={1.25} position={[-0.15, 0, -0.15]}><SceneryInner kind={kind} color={color} /></group> : <SceneryInner kind={kind} color={color} />
+}
+function SceneryInner({ kind, color }: { kind: string; color: string }) {
   switch (kind) {
+    case 'recording': return <RecordingProp color={color} />
+    case 'upload': return <UploadProp color={color} />
+    case 'review': return <ReviewProp color={color} />
+    case 'approval': return <ApprovalProp color={color} />
+    case 'database': return <DatabaseProp color={color} />
+    case 'message': return <MessageProp color={color} />
+    case 'alert': return <AlertProp />
+    case 'consent': return <ConsentProp color={color} />
+    case 'archive': return <ArchiveProp color={color} />
+    case 'handover': return <HandoverProp color={color} />
+    case 'phone': return <PhoneProp color={color} />
+    case 'report': return <ReportProp color={color} />
+    case 'meeting': return <MeetingProp color={color} />
+    case 'clinic': return <ClinicProp color={color} />
+    case 'finish': return <FinishProp color={color} />
     case 'home':
       return (
         <group position={[-0.4, 0, -0.4]}>
@@ -242,6 +583,17 @@ export interface WalkView { done: Set<string>; current?: string; finished: boole
 /** Where each step's platform sits on its island (island-local coords), left→right across the screen. */
 export function stepSpots(count: number): V3[] {
   const R = Math.SQRT1_2
+  if (count > 4) {
+    // two rows that snake back, so 5-10 steps still fit on the island without touching
+    const cols = Math.ceil(count / 2)
+    return Array.from({ length: count }, (_, i) => {
+      const row = Math.floor(i / cols)
+      const c = row ? cols - 1 - (i - cols) : i
+      const u = -1.25 + (cols === 1 ? 1.25 : (2.5 * c) / (cols - 1))
+      const w = row ? 0.7 : -0.7
+      return [(u + w) * R, 0, (-u + w) * R]
+    })
+  }
   return Array.from({ length: count }, (_, i) => {
     const t = count === 1 ? 0.5 : i / (count - 1)
     const u = -1.3 + 2.6 * t
@@ -288,8 +640,13 @@ function StepPlatforms({ process, stageId, color, selected, hoverStep, onStep, w
               ? <group scale={0.62}><Robot p={[0, 0.3, -0.05]} color={role.color} /></group>
               : <Person p={[0, 0.19, -0.05]} color={role.color} scale={0.8} />)}
             {isDone && !isCur && <mesh position={[0.24, 0.62, 0.24]}><sphereGeometry args={[0.1, 12, 10]} /><meshBasicMaterial color="#16A34A" /></mesh>}
-            {showLabels && (
-              <Html position={[0.55, -0.1, 0.55]} center zIndexRange={[14, 0]} style={{ pointerEvents: 'none' }}>
+            {showLabels && steps.length > 3 && !isSel && !isCur && (
+              <Html position={[0.35, 0.05, 0.35]} center zIndexRange={[13, 0]} style={{ pointerEvents: 'none' }}>
+                <span className="flex h-[22px] min-w-[22px] items-center justify-center rounded-full border-2 border-white px-1 text-[11px] font-extrabold text-white shadow" style={{ background: dec ? '#D97706' : isDone ? '#16A34A' : color }}>{dec ? '?' : i + 1}</span>
+              </Html>
+            )}
+            {showLabels && (steps.length <= 3 || isSel || isCur) && (
+              <Html position={[0.55, -0.1, 0.55]} center zIndexRange={[15, 0]} style={{ pointerEvents: 'none' }}>
                 <div className="flex w-[150px] items-start gap-1.5 rounded-xl border bg-white px-2 py-1 shadow-sm" style={{ borderColor: isSel || isCur ? color : '#D3D7E2' }}>
                   <span className="mt-px flex h-[18px] w-[18px] flex-none items-center justify-center rounded-full text-[10px] font-extrabold text-white" style={{ background: dec ? '#D97706' : isDone ? '#16A34A' : color }}>{dec ? '?' : i + 1}</span>
                   <span className="flex flex-col text-[11px] font-bold leading-tight text-[#151A25]">{st.label}
@@ -356,28 +713,68 @@ function Pulse({ color }: { color: string }) {
 
 /* ---------- bridges with moving dots (and walk progress) ---------- */
 export type BridgeState = 'plain' | 'done' | 'next' | 'todo'
-function Bridge({ a, b, state = 'plain', color = '#1D4ED8' }: { a: V3; b: V3; state?: BridgeState; color?: string }) {
+/** A flat strip that follows a curve (the road surface). */
+function ribbon(curve: THREE.Curve<THREE.Vector3>, width: number, y: number, seg = 36) {
+  const pts = curve.getSpacedPoints(seg)
+  const pos: number[] = [], idx: number[] = []
+  pts.forEach((p, i) => {
+    const t = curve.getTangentAt(Math.min(1, i / seg))
+    const nx = -t.z, nz = t.x, l = Math.hypot(nx, nz) || 1
+    const ox = (nx / l) * width / 2, oz = (nz / l) * width / 2
+    pos.push(p.x + ox, y, p.z + oz, p.x - ox, y, p.z - oz)
+    if (i < seg) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3) }
+  })
+  const g = new THREE.BufferGeometry()
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+  g.setIndex(idx); g.computeVertexNormals()
+  return g
+}
+
+/** A curved road between two islands, with moving dots (and walk progress). */
+function Bridge({ curve, state = 'plain', color = '#1D4ED8' }: { curve: THREE.Curve<THREE.Vector3>; state?: BridgeState; color?: string }) {
   const dots = useRef<THREE.Group>(null)
   const glow = useRef<THREE.MeshBasicMaterial>(null)
-  const dir = new THREE.Vector3(b[0] - a[0], 0, b[2] - a[2])
-  const len = dir.length()
-  const angle = Math.atan2(dir.x, dir.z)
-  const mid: V3 = [(a[0] + b[0]) / 2, -0.14, (a[2] + b[2]) / 2]
+  const deckG = useMemo(() => ribbon(curve, 0.55, -0.08), [curve])
+  const edgeG = useMemo(() => ribbon(curve, 0.72, -0.15), [curve])
+  const glowG = useMemo(() => ribbon(curve, 1.0, -0.12), [curve])
+  const len = useMemo(() => curve.getLength(), [curve])
   useFrame(({ clock }) => {
     dots.current?.children.forEach((c, i) => {
-      const t = ((clock.elapsedTime * (state === 'next' ? 0.7 : 0.35) + i / 4) % 1)
-      c.position.set(0, 0.06, -len / 2 + t * len)
+      const t = ((clock.elapsedTime * (state === 'next' ? 0.7 : 0.35) * (5.4 / len) + i / 4) % 1)
+      const q = curve.getPointAt(t); c.position.set(q.x, -0.02, q.z)
     })
     if (glow.current) glow.current.opacity = state === 'next' ? 0.35 + Math.sin(clock.elapsedTime * 4) * 0.25 : state === 'done' ? 0.55 : 0
   })
   const deck = state === 'done' ? color : state === 'todo' ? '#E2E8F0' : '#FFFFFF'
   return (
-    <group position={mid} rotation={[0, angle, 0]}>
-      <mesh><boxGeometry args={[0.55, 0.06, len]} /><M c={deck} e={state === 'done' ? 0.25 : 0} /></mesh>
-      {(state === 'done' || state === 'next') && <mesh position={[0, -0.01, 0]}><boxGeometry args={[0.85, 0.04, len]} /><meshBasicMaterial ref={glow} color={color} transparent opacity={0.4} /></mesh>}
+    <group>
+      <mesh geometry={edgeG}><meshStandardMaterial color="#CBD5E1" side={THREE.DoubleSide} roughness={0.9} /></mesh>
+      <mesh geometry={deckG}><meshStandardMaterial color={deck} side={THREE.DoubleSide} roughness={0.78} emissive={deck} emissiveIntensity={state === 'done' ? 0.25 : 0} /></mesh>
+      {(state === 'done' || state === 'next') && <mesh geometry={glowG}><meshBasicMaterial ref={glow} color={color} transparent opacity={0.4} side={THREE.DoubleSide} depthWrite={false} /></mesh>}
       {state !== 'done' && state !== 'todo' && <group ref={dots}>{[0, 1, 2, 3].map((i) => <mesh key={i}><sphereGeometry args={[0.07, 10, 8]} /><meshBasicMaterial color={state === 'next' ? color : '#1D4ED8'} /></mesh>)}</group>}
     </group>
   )
+}
+
+/** How many islands per row: one row for short processes, then a winding road of 2-3 rows. */
+const GAP = 5.4, ROW_GAP = 11
+/** How far the camera has to see for a layout (screen units), used to fit it. */
+export const layoutSpan = (cols: number, rows: number) => ({
+  w: (cols - 1) * GAP + 5.2 + (rows > 1 ? 3.5 : 0),
+  h: rows > 1 ? 9.5 + (rows - 1) * ROW_GAP * 0.5 : 11.5,
+})
+/** Islands per row: whichever of 1, 2 or 3 rows shows the islands biggest in this space. Phones get 2 per row. */
+export function roadLayout(items: number, narrow = false, w = 1200, h = 450) {
+  if (narrow) return { cols: 2, rows: Math.ceil(items / 2) }
+  let best = { cols: items, rows: 1 }, top = 0
+  for (let r = 1; r <= 3; r++) {
+    const cols = Math.ceil(items / r), rows = Math.ceil(items / cols)
+    if (r > 1 && cols < 3) break
+    const sp = layoutSpan(cols, rows)
+    const z = Math.min(w / (sp.w * 1.04), h / sp.h)
+    if (z > top * 1.04) { top = z; best = { cols, rows } } // a clear win is needed to add a row
+  }
+  return best
 }
 
 /** A small green flag planted on an island the walker has finished. */
@@ -456,18 +853,18 @@ function Avatar({ target, label }: { target: V3; label: string }) {
 
 /** Fits the island chain to the canvas, or glides in on one island when `focus` is set.
  *  Narrow screens follow the current stage. +/- buttons outside change `level`. */
-function CameraRig({ span, level, center, focus, narrow }: { span: number; level: number; center: V3; focus: V3 | null; narrow: boolean }) {
+function CameraRig({ span, spanH = 11.5, level, center, focus, narrow }: { span: number; spanH?: number; level: number; center: V3; focus: V3 | null; narrow: boolean }) {
   const { camera, size, controls } = useThree()
   const goal = useRef({ zoom: 40, t: new THREE.Vector3(), moving: true })
   useEffect(() => {
-    const fitAll = Math.min(size.width / (span * 1.04), size.height / 11.5)
+    const fitAll = Math.min(size.width / (span * 1.04), size.height / spanH)
     const zoomIn = Math.min(size.width / 8.5, size.height / 6.2)
-    const z = focus ? zoomIn : narrow ? size.width / 13 : fitAll
+    const z = focus ? zoomIn : narrow ? Math.min(size.width / 15.5, size.height / 9) : fitAll
     // when zoomed in on a wide screen, keep the island to the right of the details panel
     const shift = focus && !narrow && size.width > 760 ? 175 / z : 0
     const t = focus ? new THREE.Vector3(focus[0] - shift * Math.SQRT1_2, 0.4, focus[2] + shift * Math.SQRT1_2) : narrow ? new THREE.Vector3(center[0], -0.2, center[2]) : new THREE.Vector3(0, -0.2, 0)
     goal.current = { zoom: z * Math.pow(1.2, level), t, moving: true }
-  }, [size.width, size.height, span, level, narrow, focus?.[0], focus?.[2], center[0], center[2]])
+  }, [size.width, size.height, span, spanH, level, narrow, focus?.[0], focus?.[2], center[0], center[2]])
   useFrame((_, dt) => {
     const g = goal.current
     if (!g.moving) return
@@ -517,18 +914,43 @@ export interface IslandsProps {
 export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground }: IslandsProps) {
   const n = process.stages.length
   const items = n + 2
-  const gap = 5.4
+  const gap = GAP
+  const narrowEarly = useNarrow()
+  const wrap = useRef<HTMLDivElement>(null)
+  const [box, setBox] = useState({ w: 1200, h: 450 })
+  useEffect(() => {
+    const el = wrap.current; if (!el) return
+    const ro = new ResizeObserver(([e]) => { const r = e.contentRect; if (r.width && r.height) setBox({ w: r.width, h: r.height }) })
+    ro.observe(el); return () => ro.disconnect()
+  }, [])
+  const { cols, rows } = roadLayout(items, narrowEarly && !compact, box.w, box.h)
+  const rowGap = ROW_GAP
+  const amp = rows > 1 ? 1.3 : 1.5
   // The camera looks from (1,1,1): screen-right is (1,0,-1) and screen-down is (1,0,1).
-  // Islands run left→right across the screen and zig-zag up/down a little.
+  // Islands run along a winding road: rows go left→right, then right→left, each island a little up or down.
   const R = Math.SQRT1_2
-  const posOf = (i: number): V3 => {
-    const u = (i - (items - 1) / 2) * gap
-    const w = i % 2 ? 1.5 : -1.5
-    return [(u + w) * R, 0, (-u + w) * R]
+  const screenOf = (i: number): [number, number] => {
+    const r = Math.floor(i / cols)
+    let c = i % cols
+    if (r % 2) c = cols - 1 - c
+    return [(c - (cols - 1) / 2) * gap, (r - (rows - 1) / 2) * rowGap + (c % 2 ? amp : -amp)]
   }
+  const toWorld = (x: number, y: number): V3 => [(x + y) * R, 0, (-x + y) * R]
+  const posOf = (i: number): V3 => toWorld(...screenOf(i))
+  // curved roads: gentle S-bends along a row, a U-turn at the end of a row
+  const roads = useMemo(() => Array.from({ length: Math.max(0, items - 1) }).map((_, i) => {
+    const [ax, ay] = screenOf(i), [bx, by] = screenOf(i + 1)
+    const turn = Math.floor(i / cols) !== Math.floor((i + 1) / cols)
+    const side = ax > 0 ? 1 : -1
+    const c1 = turn ? [ax + side * 4.2, ay + rowGap * 0.12] : [ax + (bx - ax) * 0.5, ay]
+    const c2 = turn ? [bx + side * 4.2, by - rowGap * 0.12] : [bx - (bx - ax) * 0.5, by]
+    const v = (p: number[]) => new THREE.Vector3(...toWorld(p[0], p[1]))
+    return new THREE.CubicBezierCurve3(v([ax, ay]), v(c1), v(c2), v([bx, by]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [items, cols, rows])
   const stageRoleList = useMemo<Role[][]>(() => process.stages.map((s) => stageRoles(process, s)), [process])
   const loops = useMemo(() => loopsOf(process), [process])
-  const narrow = useNarrow()
+  const narrow = narrowEarly
   const dimOf = (k: number) => focus !== null ? focus !== k : (!!roleFilter && !stageRoleList[k].some((r) => r.id === roleFilter))
   // walking: which stage the walker is on, and which stages are finished
   const stepStage = (id?: string) => process.stages.findIndex((st) => st.id === process.steps.find((x) => x.id === id)?.stageId)
@@ -550,6 +972,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
   })()
 
   return (
+    <div ref={wrap} className="h-full w-full">
     <Canvas onPointerMissed={() => onBackground?.()} flat orthographic camera={{ position: [18, 16, 18], zoom: 40, near: -100, far: 200 }} dpr={[1, 2]}
       style={{ touchAction: 'pan-y' }}
       aria-label={`3D view of ${process.title}`}>
@@ -558,7 +981,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
       <directionalLight position={[8, 14, 6]} intensity={1.0} />
       <directionalLight position={[4, 6, 14]} intensity={0.55} />
               <group>
-          {Array.from({ length: items - 1 }).map((_, i) => <Bridge key={i} a={posOf(i)} b={posOf(i + 1)} state={bridgeState(i)} color={process.stages[Math.min(i, n - 1)]?.color ?? '#0F766E'} />)}
+          {roads.map((curve, i) => <Bridge key={i} curve={curve} state={bridgeState(i)} color={process.stages[Math.min(i, n - 1)]?.color ?? '#0F766E'} />)}
 
           {/* start: one flag per trigger */}
           <Island pos={posOf(0)} color="#64748B" top="#E2E8F0" side="#64748B" dim={focus !== null}>
@@ -597,7 +1020,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                   <StepPlatforms process={process} stageId={s.id} color={s.color} selected={selectedStep} hoverStep={hoverStep} onStep={onStep} walk={walk} showLabels />
                 )}
                 {stageDone(k) && <DoneFlag />}
-                {!platforms && <Scenery kind={sceneFor(s)} color={s.color} />}
+                {!platforms && <Scenery kind={sceneFor(s, process)} color={s.color} />}
                 {!platforms && [...roles].sort((x, y) => Number(roleKind(y) === 'agent') - Number(roleKind(x) === 'agent')).slice(0, 3).map((r, i) => {
                   const pp: V3 = roleKind(r) === 'agent' ? [-0.75, 0, 1.0] : [0.2 + i * 0.6, 0, 1.15 - i * 0.15]
                   return roleKind(r) === 'agent'
@@ -605,15 +1028,22 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                     : <Person key={r.id} p={pp} color={r.color} />
                 })}
                 {!platforms && process.steps.some((x) => x.stageId === s.id && x.kind === 'decision') && <CheckSign repeat={loops.some((l) => l.from === k && l.to === k)} />}
-                {!compact && s.systems[0] && (!narrow || isActive) && (focus === null || focus === k) && (
+                {!compact && s.systems[0] && (!narrow || isActive) && (focus === null || focus === k) && (() => {
+                  const sys = s.systems.map(sysLabel).filter(Boolean)
+                  const unsure = s.systems.some(sysUnsure)
+                  return (
                   <Float speed={2} floatIntensity={0.6} rotationIntensity={0}>
-                    <Html position={[1.1, 2.6, -1]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? 0.25 : 1 }}>
-                      <div className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-white shadow">
-                        <span className="h-2.5 w-3.5 rounded-sm border-2" style={{ borderColor: tint(s.color, 0.6) }} />{s.systems.join(' · ')}
+                    <Html position={[1.7, 2.6, -1.3]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? 0.25 : 1 }}>
+                      <div className="flex max-w-[230px] items-center gap-1.5 whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-xs font-bold text-white shadow">
+                        <span className="h-2.5 w-3.5 flex-none rounded-sm border-2" style={{ borderColor: tint(s.color, 0.6) }} />
+                        <span className="truncate">{sys.slice(0, 2).join(' · ')}</span>
+                        {sys.length > 2 && <span className="flex-none text-white/70">+{sys.length - 2}</span>}
+                        {unsure && <span title="The owner still needs to confirm this system" className="flex h-4 w-4 flex-none items-center justify-center rounded-full bg-[#F59E0B] text-[10px] text-ink">?</span>}
                       </div>
                     </Html>
                   </Float>
-                )}
+                  )
+                })()}
                 {!compact && (
                   <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? (focus !== null ? 0 : 0.3) : 1 }}>
                     <div className="flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold" style={{ borderColor: s.color }}>
@@ -648,14 +1078,15 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
           {focus === null && loops.filter((l) => l.from !== l.to).map((l) => (
             <LoopArc key={`${l.from}-${l.to}`} a={posOf(l.from + 1)} b={posOf(l.to + 1)} compact={compact}
               focus={!narrow && (active === l.from || active === l.to)} short={l.from === l.to ? 'Repeats' : `${l.label || 'Back'} → stage ${l.to + 1}`}
-              text={l.from === l.to ? `${l.label || 'Not yet'}? Repeat “${l.toStep}”` : `${l.label || 'Back'} → back to “${l.toStep}”`} />
+              text={l.from === l.to ? `${l.label || 'Not yet'}? Repeat “${l.toStep}”` : l.label ? `${l.label} → back to “${l.toStep}”` : `Back to “${l.toStep}”`} />
           ))}
           {!compact && n > 0 && (walk || focus === null) && <Avatar target={avatarTarget} label={walk?.finished ? 'All done!' : avatarLabel} />}
           {!compact && walk && <Confetti at={avatarTarget} nonce={walk.nonce} />}
         </group>
-      <ContactShadows position={[0, -2.3, 0]} scale={items * gap * 1.4} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
+      <ContactShadows position={[0, -2.3, 0]} scale={Math.max(cols * gap, rows * rowGap) * 1.6} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
       {!compact && <OrbitControls makeDefault enablePan={false} enableZoom={false} minPolarAngle={0.55} maxPolarAngle={1.15} />}
-      <CameraRig span={(items - 1) * gap + 5.2} level={zoomLevel} narrow={narrow && !compact} center={posOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
+      <CameraRig span={layoutSpan(cols, rows).w} spanH={layoutSpan(cols, rows).h} level={zoomLevel} narrow={narrow && !compact} center={toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
+    </div>
   )
 }

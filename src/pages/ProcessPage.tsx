@@ -7,7 +7,7 @@ import { Card, Tag } from '@/components/ui/card'
 import { Segmented } from '@/components/ui/segmented'
 import Islands3D from '@/three/Islands3D'
 import { canEdit, useData, useSession } from '@/store/store'
-import { allSystems, roleKind, stageRoles, stepCount } from '@/lib/derive'
+import { allSystems, roleKind, stageRoles, stepCount, sysLabel, sysUnsure } from '@/lib/derive'
 import { catOf, processResources, stageResources, stepResources } from '@/lib/resources'
 import { tint, type LibraryItem, type Process } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -90,6 +90,11 @@ function ProcessView({ proc }: { proc: Process }) {
         {canEdit(persona, proc) && <Button variant="outlined" size="sm" onClick={() => nav(`/builder/${proc.id}`)}><Pencil size={15} />Edit in Builder</Button>}
       </AppHeader>
       <main className="mx-auto flex max-w-[1360px] flex-col gap-7 px-3 pb-20 pt-1 sm:px-6">
+        {proc.draftNote && !proc.needsCompleting && (
+          <div className="flex items-start gap-3 rounded-[18px] bg-[#FFF7E6] px-5 py-3 text-sm text-[#7A3A00]">
+            <Pencil size={16} className="mt-0.5 flex-none" aria-hidden /><span><b>To be confirmed.</b> {proc.draftNote}</span>
+          </div>
+        )}
         {proc.needsCompleting && (
           <div className="flex items-center gap-3 rounded-[18px] bg-tertiary-container px-5 py-3 text-sm text-[#7A3A00]">
             <Pencil size={16} aria-hidden />This process is still being completed by its owner ({proc.owner}). Some stages don't have their steps yet.
@@ -97,48 +102,42 @@ function ProcessView({ proc }: { proc: Process }) {
         )}
 
         {/* ---------- 3D hero ---------- */}
-        <section className="dot-grid relative flex flex-col gap-4 overflow-hidden rounded-[36px] p-4 sm:p-7">
-          <div className="relative z-[1] flex flex-wrap items-start gap-4">
-            <div className="flex min-w-[min(460px,100%)] flex-1 flex-col gap-2">
-              <nav aria-label="Breadcrumb" className="flex gap-1.5 text-sm font-semibold text-on-surface-variant"><Link to="/" className="no-underline">Processes</Link><span aria-hidden>/</span><span>{proc.area}</span></nav>
+        <section className="dot-grid relative flex flex-col gap-3 overflow-hidden rounded-[36px] p-4 sm:px-7 sm:py-5">
+          <div className="relative z-[1] flex flex-wrap items-start gap-x-6 gap-y-3">
+            <div className="flex min-w-[min(420px,100%)] flex-1 flex-col gap-1.5">
+              <nav aria-label="Breadcrumb" className="flex gap-1.5 text-[13px] font-semibold text-on-surface-variant"><Link to="/" className="no-underline">Processes</Link><span aria-hidden>/</span><span>{proc.area}</span></nav>
               <div className="flex flex-wrap items-center gap-3">
-                {proc.code && <span className="inline-flex h-8 items-center rounded-[10px] bg-primary px-3 text-[15px] font-extrabold text-white">{proc.code}</span>}
-                <h1 className="m-0 text-[clamp(28px,4vw,40px)] font-extrabold leading-[1.05] tracking-[-0.02em]">{proc.title}</h1>
+                {proc.code && <span className="inline-flex h-7 items-center rounded-[9px] bg-primary px-2.5 text-sm font-extrabold text-white">{proc.code}</span>}
+                <h1 className="m-0 text-[clamp(24px,3vw,34px)] font-extrabold leading-[1.1] tracking-[-0.02em]">{proc.title}</h1>
               </div>
-              <p className="m-0 max-w-[640px] text-base leading-normal text-on-surface-variant"><Terms text={proc.summary} /></p>
+              <p className="m-0 line-clamp-2 max-w-[720px] text-[15px] leading-snug text-on-surface-variant"><Terms text={proc.summary} /></p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-on-surface-variant">
+                <Person label="Owner" name={proc.owner} bg="#DFE7FF" fg="#0A2472" />
+                {proc.executiveOwner && <Person label="Executive" name={proc.executiveOwner} bg="#D3F2DE" fg="#0B3D20" />}
+                {proc.reviewNext && <span>Next review <b className="text-on-surface">{proc.reviewNext}</b></span>}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2.5">
-              <OwnerCard label="Process owner" name={proc.owner} bg="#DFE7FF" fg="#0A2472" />
-              {proc.executiveOwner && <OwnerCard label="Executive owner" name={proc.executiveOwner} bg="#D3F2DE" fg="#0B3D20" />}
-              {proc.reviewNext && (
-                <div className="glass flex min-w-[150px] flex-col gap-1 rounded-[18px] px-4 py-3">
-                  <span className="lbl">Next review</span><b className="text-sm">{proc.reviewNext}</b>
-                  <span className="h-[5px] rounded bg-surface-mid"><span className="block h-[5px] w-[88%] rounded bg-[#EA580C]" /></span>
-                </div>
-              )}
-            </div>
+            {n > 0 && (
+              <div className="flex flex-wrap items-center gap-2 self-center">
+                <Button onClick={walking ? stopWalk : startWalk} className={walking ? 'bg-on-surface' : ''}>
+                  <Footprints size={16} />{walking ? 'Stop walking' : w.walk.started && !w.walk.finished ? `Continue walking (${w.doneCount}/${w.total})` : 'Walk it with me'}
+                </Button>
+                <Button variant="outlined" onClick={toggleMyPart} aria-pressed={myPart} className={myPart ? 'border-primary bg-primary-container text-on-primary-container' : ''}><UserRound size={16} />Just my part</Button>
+                <Button variant="outlined" onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={16} />Ask</Button>
+                {w.walk.started && !walking && <Button variant="text" size="sm" onClick={w.reset}>Reset walk</Button>}
+              </div>
+            )}
           </div>
 
-          <div className="glass relative z-[1] flex flex-wrap items-center gap-1.5 self-start rounded-[22px] p-2">
+          <div className="glass relative z-[1] flex flex-wrap items-center gap-1.5 self-start rounded-[20px] p-1.5">
             <span className="px-2 text-[13px] font-bold text-on-surface-variant">Show me as</span>
             <RoleChip on={role === null} color="#151A25" name="Everyone" onClick={() => setRole(null)} />
             {proc.roles.map((r) => <RoleChip key={r.id} on={role === r.id} color={r.color} name={r.name} onClick={() => setRole(r.id)} />)}
             {role && <span className="px-2.5 text-[13px] font-semibold text-primary">{mine.length ? `In stage${mine.length > 1 ? 's' : ''} ${mine.join(', ')}` : 'Not in any stage yet'}</span>}
           </div>
 
-          {n > 0 && (
-            <div className="relative z-[1] flex flex-wrap items-center gap-2">
-              <Button onClick={walking ? stopWalk : startWalk} className={walking ? 'bg-on-surface' : ''}>
-                <Footprints size={16} />{walking ? 'Stop walking' : w.walk.started && !w.walk.finished ? `Continue walking (${w.doneCount}/${w.total})` : 'Walk it with me'}
-              </Button>
-              <Button variant="outlined" onClick={toggleMyPart} aria-pressed={myPart} className={myPart ? 'border-primary bg-primary-container text-on-primary-container' : ''}><UserRound size={16} />Just my part</Button>
-              <Button variant="outlined" onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={16} />Ask about this process</Button>
-              {w.walk.started && !walking && <Button variant="text" size="sm" onClick={w.reset}>Reset walk</Button>}
-            </div>
-          )}
-
           <div className="relative -mx-2 flex flex-col gap-3">
-            <div className="relative h-[clamp(320px,42vw,500px)]">
+            <div className="relative h-[min(clamp(300px,36vw,480px),calc(100vh-400px))] min-h-[290px] max-sm:h-[420px]">
             <Islands3D process={proc} active={i} onSelect={(k) => { if (!walking) select(k) }} hover={hover} onHover={setHover} roleFilter={role} zoomLevel={zoom} avatarLabel={walking ? 'Me' : 'I am here'}
               focus={focus} selectedStep={selStep} hoverStep={hoverStep} onStep={(id) => { if (!walking) setSelStep((x) => x === id ? null : id) }} walk={walkView} onBackground={() => { if (!walking && focus !== null) zoomOut() }} />
             {n === 0 && <div className="absolute inset-0 flex items-center justify-center"><span className="glass rounded-full px-5 py-2.5 text-sm font-bold">The owner hasn't added stages yet</span></div>}
@@ -208,16 +207,17 @@ function ProcessView({ proc }: { proc: Process }) {
   )
 }
 
-const OwnerCard = ({ label, name, bg, fg }: { label: string; name: string; bg: string; fg: string }) => (
-  <div className="glass flex items-center gap-2.5 rounded-[18px] px-4 py-3">
-    <span className="flex h-9 w-9 items-center justify-center rounded-full text-[13px] font-extrabold" style={{ background: bg, color: fg }}>{name.split(' ').map((w) => w[0]).join('').slice(0, 2)}</span>
-    <div><div className="lbl">{label}</div><b className="text-sm">{name}</b></div>
-  </div>
+const Person = ({ label, name, bg, fg }: { label: string; name: string; bg: string; fg: string }) => (
+  <span className="inline-flex items-center gap-1.5">
+    <span className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-extrabold" style={{ background: bg, color: fg }}>{name.split(' ').map((w) => w[0]).join('').slice(0, 2)}</span>
+    {label} <b className="text-on-surface">{name}</b>
+  </span>
 )
+
 
 const RoleChip = ({ on, color, name, onClick }: { on: boolean; color: string; name: string; onClick: () => void }) => (
   <button onClick={onClick} aria-pressed={on}
-    className={cn('inline-flex h-9 cursor-pointer items-center gap-2 rounded-full border pl-2.5 pr-3.5 text-[13px] font-semibold', on ? 'border-on-surface bg-on-surface text-white' : 'border-outline-variant bg-white text-on-surface hover:bg-surface-low')}>
+    className={cn('inline-flex h-8 cursor-pointer items-center gap-2 rounded-full border pl-2.5 pr-3 text-[13px] font-semibold', on ? 'border-on-surface bg-on-surface text-white' : 'border-outline-variant bg-white text-on-surface hover:bg-surface-low')}>
     <span className="h-3 w-3 rounded-full shadow-[0_0_0_2px_#fff]" style={{ background: color }} />{name}
   </button>
 )
@@ -243,7 +243,8 @@ function StagePanel({ proc, k, onClose, onNext, selStep, onStep, onHoverStep }: 
   const checks = steps.filter((x) => x.kind === 'decision').map((d) => {
     const e = proc.edges.find((e) => e.from === d.id && /^no$/i.test(e.label ?? ''))
     const no = e ? proc.steps.find((x) => x.id === e.to) : undefined
-    return { id: d.id, label: d.label, no, noStage: no ? proc.stages.findIndex((st) => st.id === no.stageId) : -1 }
+    const order = (id?: string) => proc.steps.findIndex((x) => x.id === id)
+    return { id: d.id, label: d.label, no, back: !!no && order(no.id) < order(d.id), noStage: no ? proc.stages.findIndex((st) => st.id === no.stageId) : -1 }
   })
   return (
     <aside className="absolute left-2 top-0 z-[40] flex max-h-full max-sm:static max-sm:w-full max-sm:max-w-none max-sm:max-h-none border border-outline-variant bg-white w-[340px] max-w-[calc(100%-16px)] flex-col overflow-hidden rounded-[28px] shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.22)]" aria-label={`Stage ${k + 1} details`}>
@@ -312,12 +313,12 @@ function StagePanel({ proc, k, onClose, onNext, selStep, onStep, onHoverStep }: 
             {checks.map((c) => (
               <div key={c.id} className="flex flex-col gap-1 rounded-[14px] bg-[#FFF7E6] px-3 py-2.5 text-sm">
                 <span className="flex items-center gap-2 font-bold"><span className="h-3 w-3 rotate-45 rounded-[2px] bg-[#FBBF24]" />{c.label}</span>
-                {c.no && <span className="flex items-center gap-1.5 text-[13px] text-[#9A3412]"><Undo2 size={14} />If not: back to “{c.no.label}”{c.noStage !== k ? ` (stage ${c.noStage + 1})` : ''}</span>}
+                {c.no && <span className="flex items-center gap-1.5 text-[13px] text-[#9A3412]"><Undo2 size={14} />If not: {c.back ? 'back to ' : ''}“{c.no.label}”{c.noStage !== k ? ` (stage ${c.noStage + 1})` : ''}</span>}
               </div>
             ))}
           </div>
         )}
-        {s.systems.length > 0 && <div className="flex flex-col gap-2"><span className="lbl">Systems</span><div className="flex flex-wrap gap-1.5">{s.systems.map((x) => <Tag key={x} className="bg-ink text-white"><Terms text={x} /></Tag>)}</div></div>}
+        {s.systems.length > 0 && <div className="flex flex-col gap-2"><span className="lbl">Systems</span><div className="flex flex-wrap gap-1.5">{s.systems.map((x) => <Tag key={x} className="bg-ink text-white"><Terms text={sysLabel(x)} />{sysUnsure(x) && <span title="The owner still needs to confirm this system" className="ml-1 text-[#FBBF24]">?</span>}</Tag>)}</div></div>}
         {(needs.length > 0 || s.docs.length > 0) && (
           <div className="flex flex-col gap-1.5"><span className="lbl">You'll need</span>
             {needs.map((it) => (
@@ -499,7 +500,7 @@ function RoleView({ proc, initial }: { proc: Process; initial?: string }) {
       <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-5">
         {det && det.rules.length > 0 && <Card className="flex flex-col gap-2.5"><h3 className="m-0 text-[17px] font-extrabold">Rules you must follow</h3>{det.rules.map((r) => <div key={r} className="flex items-start gap-2.5 text-sm"><Check2 />{r}</div>)}</Card>}
         <Card className="flex flex-col gap-2.5"><h3 className="m-0 text-[17px] font-extrabold">Systems you use</h3>
-          <div className="flex flex-wrap gap-2">{systems.length ? systems.map((s) => <Tag key={s} className="bg-ink text-white">{s}</Tag>) : <span className="text-sm text-on-surface-variant">None listed yet</span>}</div>
+          <div className="flex flex-wrap gap-2">{systems.length ? systems.map((s) => <Tag key={s} className="bg-ink text-white">{sysLabel(s)}</Tag>) : <span className="text-sm text-on-surface-variant">None listed yet</span>}</div>
           {docs.length > 0 && <><span className="lbl mt-2.5">Your documents</span>{docs.map((d) => <span key={d} className="flex items-center gap-2 text-sm font-semibold"><FileText size={16} className="text-primary" />{d}</span>)}</>}
         </Card>
         {det && det.policies.length > 0 && <Card className="flex flex-col gap-2"><h3 className="m-0 mb-1 text-[17px] font-extrabold">Policies & guides</h3>{det.policies.map((d) => <span key={d} className="flex items-center gap-2 text-sm font-semibold"><ShieldCheck size={16} className="text-[#EA580C]" />{d}</span>)}</Card>}
