@@ -24,7 +24,7 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
     { to: '/admin', label: 'Admin', show: persona === 'admin' },
   ].filter((n) => n.show)
   return (
-    <header className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-8">
+    <header className="flex flex-wrap items-center gap-3 px-4 py-3.5 sm:px-8 print:hidden">
       <Logo />
       <nav aria-label="Main" className="ml-2 flex flex-wrap gap-1">
         {nav.map((n) => (

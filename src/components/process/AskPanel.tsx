@@ -4,12 +4,13 @@ import { Loader2, MessageCircleQuestion, Send, X, ArrowRight } from 'lucide-reac
 import { Button } from '@/components/ui/button'
 import { askAbout, type ChatMsg } from '@/ai/groq'
 import { useData, useSession } from '@/store/store'
+import { cn } from '@/lib/utils'
 import type { Process } from '@/lib/types'
 
 interface Msg extends ChatMsg { stage?: number | null }
 
 /** Anyone can ask questions about the process they are looking at. */
-export function AskPanel({ proc, onClose, onShowStage }: { proc: Process; onClose: () => void; onShowStage: (k: number) => void }) {
+export function AskPanel({ proc, onClose, onShowStage, docked = false }: { proc: Process; onClose: () => void; onShowStage: (k: number) => void; docked?: boolean }) {
   const { groqKey, model, persona } = useSession()
   const library = useData((s) => s.library)
   const [msgs, setMsgs] = useState<Msg[]>([])
@@ -33,7 +34,7 @@ export function AskPanel({ proc, onClose, onShowStage }: { proc: Process; onClos
     } catch (e) { setErr((e as Error).message) } finally { setBusy(false); setTimeout(() => end.current?.scrollIntoView({ block: 'end' }), 30) }
   }
   return (
-    <aside aria-label="Ask about this process" className="absolute right-2 top-0 z-[45] flex max-h-full max-sm:static max-sm:w-full max-sm:max-w-none max-sm:max-h-none w-[360px] max-w-[calc(100%-16px)] flex-col overflow-hidden rounded-[28px] border border-outline-variant bg-white shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.22)]">
+    <aside aria-label="Ask about this process" className={cn(docked ? "relative max-h-[70vh] w-full" : "absolute right-2 top-0 z-[45] max-h-full max-sm:static max-sm:w-full max-sm:max-w-none max-sm:max-h-none w-[360px] max-w-[calc(100%-16px)]", "flex flex-col overflow-hidden rounded-[28px] border border-outline-variant bg-white shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.22)] print:hidden")}>
       <div className="flex items-center gap-2.5 bg-primary-container px-5 py-3.5 text-on-primary-container">
         <MessageCircleQuestion size={20} aria-hidden /><b className="flex-1 text-[15px]">Ask about this process</b>
         <button onClick={onClose} aria-label="Close" className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-white/70"><X size={15} /></button>

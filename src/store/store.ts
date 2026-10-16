@@ -140,6 +140,9 @@ interface SessionState {
   myRole: string
   groqKey: string
   model: string
+  /** how processes are shown: the 3D islands or the simple timeline */
+  viewMode: '3d' | 'simple'
+  setViewMode: (v: '3d' | 'simple') => void
   setPersona: (p: Persona) => void
   setMyRole: (r: string) => void
   setGroq: (key: string, model: string) => void
@@ -153,6 +156,8 @@ export const useSession = create<SessionState>()(
       myRole: 'House Supervisor',
       groqKey: '',
       model: 'openai/gpt-oss-120b',
+      viewMode: '3d',
+      setViewMode: (viewMode) => setS({ viewMode }),
       setPersona: (persona) => setS({ persona }),
       setMyRole: (myRole) => setS({ myRole }),
       setGroq: (groqKey, model) => setS({ groqKey, model }),

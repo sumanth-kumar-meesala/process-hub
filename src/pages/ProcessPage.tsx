@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, Flag, Minus, MousePointerClick, Pencil, Play, Plus, Trophy, Users, X, Monitor, ShieldCheck, Share2, HeartHandshake, Bot, Plug, Undo2, Footprints, MessageCircleQuestion, UserRound, ChevronDown } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, Flag, Minus, MousePointerClick, Pencil, Play, Plus, Trophy, Users, X, Monitor, ShieldCheck, Share2, HeartHandshake, Bot, Plug, Undo2, Footprints, MessageCircleQuestion, UserRound, ChevronDown, Box, List, Printer } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { Card, Tag } from '@/components/ui/card'
@@ -9,12 +9,14 @@ import Islands3D from '@/three/Islands3D'
 import { canEdit, useData, useSession } from '@/store/store'
 import { allSystems, roleKind, stageRoles, stepCount, sysLabel, sysUnsure } from '@/lib/derive'
 import { catOf, processResources, stageResources, stepResources } from '@/lib/resources'
-import { tint, type LibraryItem, type Process } from '@/lib/types'
+import { tint, type Process } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useWalk } from '@/lib/walk'
 import { Terms } from '@/components/Terms'
 import { WalkCard } from '@/components/process/WalkCard'
 import { AskPanel } from '@/components/process/AskPanel'
+import { ResourceLink } from '@/components/process/ResourceLink'
+import { SimpleView } from '@/components/process/SimpleView'
 
 type View = 'overview' | 'role' | 'owner'
 
@@ -29,7 +31,10 @@ export default function ProcessPage() {
 }
 
 function ProcessView({ proc }: { proc: Process }) {
-  const { persona, myRole } = useSession()
+  const { persona, myRole, viewMode, setViewMode } = useSession()
+  const can3d = useMemo(hasWebGL, [])
+  const simple = viewMode === 'simple' || !can3d
+  const [flash, setFlash] = useState<{ k: number; n: number } | null>(null)
   const nav = useNavigate()
   const [i, setI] = useState(0)
   const [hover, setHover] = useState<number | null>(null)
@@ -44,12 +49,19 @@ function ProcessView({ proc }: { proc: Process }) {
   const [asking, setAsking] = useState(false)
   const [myPart, setMyPart] = useState(false)
   const [params] = useSearchParams()
-  const w = useWalk(proc)
+  // with a role picked in "Show me as", the walk stops only on that role's steps (unless they choose "Whole process")
+  const [walkAll, setWalkAll] = useState(false)
+  const walkRole = role && !walkAll ? role : null
+  const w = useWalk(proc, walkRole)
   const n = proc.stages.length
   const stage = proc.stages[i]
   const mine = role ? proc.stages.map((s, k) => (stageRoles(proc, s).some((r) => r.id === role) ? k + 1 : 0)).filter(Boolean) : []
   // clicking an island zooms into it
-  const select = (k: number) => { setI(k); setOpen(true); setFocus(k); setSelStep(null) }
+  const select = (k: number) => {
+    setI(k); setSelStep(null)
+    if (simple) { setFlash((f) => ({ k, n: (f?.n ?? 0) + 1 })); return }
+    setOpen(true); setFocus(k)
+  }
   const zoomOut = () => { setFocus(null); setOpen(false); setSelStep(null); setHoverStep(null) }
   const next = () => { const k = n ? (i + 1) % n : 0; if (focus !== null) select(k); else setI(k) }
   const myRoleId = proc.roles.find((r) => r.name === myRole)?.id
@@ -73,8 +85,10 @@ function ProcessView({ proc }: { proc: Process }) {
   useEffect(() => {
     if (!walking) return
     if (w.walk.finished) { setFocus(null); return }
-    if (walkStage >= 0) { setI(walkStage); setFocus(walkStage) }
-  }, [walking, walkStage, w.walk.finished])
+    if (walkStage >= 0) { setI(walkStage); if (!simple) setFocus(walkStage) }
+  }, [walking, walkStage, w.walk.finished, simple])
+  // switching role mid-walk: start that role's walk if it hasn't been started yet
+  useEffect(() => { if (walking && !w.walk.started) w.start() }, [walking, walkRole]) // eslint-disable-line react-hooks/exhaustive-deps
   const startWalk = () => { if (!w.walk.started || w.walk.finished) w.start(); setWalking(true); setOpen(false) }
   const stopWalk = () => { setWalking(false); setFocus(null) }
   const walkView = walking ? { done: new Set(w.walk.done), current: w.walk.current, finished: w.walk.finished, nonce: w.walk.nonce } : null
@@ -102,7 +116,7 @@ function ProcessView({ proc }: { proc: Process }) {
         )}
 
         {/* ---------- 3D hero ---------- */}
-        <section className="dot-grid relative flex flex-col gap-3 overflow-hidden rounded-[36px] p-4 sm:px-7 sm:py-5">
+        <section className="dot-grid relative flex flex-col gap-3 overflow-clip rounded-[36px] p-4 sm:px-7 sm:py-5">
           <div className="relative z-[1] flex flex-wrap items-start gap-x-6 gap-y-3">
             <div className="flex min-w-[min(420px,100%)] flex-1 flex-col gap-1.5">
               <nav aria-label="Breadcrumb" className="flex gap-1.5 text-[13px] font-semibold text-on-surface-variant"><Link to="/" className="no-underline">Processes</Link><span aria-hidden>/</span><span>{proc.area}</span></nav>
@@ -118,7 +132,7 @@ function ProcessView({ proc }: { proc: Process }) {
               </div>
             </div>
             {n > 0 && (
-              <div className="flex flex-wrap items-center gap-2 self-center">
+              <div className="flex flex-wrap items-center gap-2 self-center print:hidden">
                 <Button onClick={walking ? stopWalk : startWalk} className={walking ? 'bg-on-surface' : ''}>
                   <Footprints size={16} />{walking ? 'Stop walking' : w.walk.started && !w.walk.finished ? `Continue walking (${w.doneCount}/${w.total})` : 'Walk it with me'}
                 </Button>
@@ -129,13 +143,46 @@ function ProcessView({ proc }: { proc: Process }) {
             )}
           </div>
 
-          <div className="glass relative z-[1] flex flex-wrap items-center gap-1.5 self-start rounded-[20px] p-1.5">
+          <div className="relative z-[1] flex flex-wrap items-center gap-3 print:hidden">
+          <div className="glass flex flex-wrap items-center gap-1.5 rounded-[20px] p-1.5">
             <span className="px-2 text-[13px] font-bold text-on-surface-variant">Show me as</span>
             <RoleChip on={role === null} color="#151A25" name="Everyone" onClick={() => setRole(null)} />
             {proc.roles.map((r) => <RoleChip key={r.id} on={role === r.id} color={r.color} name={r.name} onClick={() => setRole(r.id)} />)}
             {role && <span className="px-2.5 text-[13px] font-semibold text-primary">{mine.length ? `In stage${mine.length > 1 ? 's' : ''} ${mine.join(', ')}` : 'Not in any stage yet'}</span>}
           </div>
+          <div className="flex-1" />
+          {n > 0 && simple && (
+            <button onClick={() => window.print()} className="glass inline-flex h-10 cursor-pointer items-center gap-2 rounded-full border-0 px-4 text-[13px] font-bold text-on-surface"><Printer size={15} />Print</button>
+          )}
+          {n > 0 && (
+            <div role="radiogroup" aria-label="How to show the process" className="glass flex gap-1 rounded-full p-1">
+              {([['3d', '3D', Box], ['simple', 'Simple', List]] as const).map(([id, label, Icon]) => {
+                const on = (simple ? 'simple' : '3d') === id
+                const off = id === '3d' && !can3d
+                return (
+                  <button key={id} role="radio" aria-checked={on} disabled={off} title={off ? "3D isn't available in this browser" : undefined}
+                    onClick={() => { setViewMode(id); if (id === 'simple') { setOpen(false); setFocus(null) } }}
+                    className={cn('inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border-0 px-3.5 text-[13px] font-bold disabled:cursor-not-allowed disabled:opacity-40', on ? 'bg-on-surface text-white' : 'bg-transparent text-on-surface-variant hover:bg-surface-low')}>
+                    <Icon size={15} aria-hidden />{label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          </div>
 
+          {simple ? (
+            <div className={cn('grid items-start gap-4', (walking || asking) && 'lg:grid-cols-[minmax(0,1fr)_360px]')}>
+              {n > 0 ? <SimpleView proc={proc} role={role} onClearRole={() => { setRole(null); setMyPart(false) }} walk={walkView} active={i} selStep={selStep} onStep={(id) => setSelStep((x) => x === id ? null : id)} flash={flash} />
+                : <p className="m-0 rounded-[20px] bg-white p-6 text-sm text-on-surface-variant">The owner hasn't added stages yet.</p>}
+              {(walking || asking) && (
+                <div className="flex flex-col gap-3 lg:sticky lg:top-4">
+                  {walking && <WalkCard proc={proc} w={w} scopeRole={proc.roles.find((r) => r.id === role)} mineOnly={!!walkRole} onScope={(m) => setWalkAll(!m)} onClose={stopWalk} docked />}
+                  {asking && <AskPanel proc={proc} docked onClose={() => setAsking(false)} onShowStage={(k) => { setWalking(false); select(k) }} />}
+                </div>
+              )}
+            </div>
+          ) : (
           <div className="relative -mx-2 flex flex-col gap-3">
             <div className="relative h-[min(clamp(300px,36vw,480px),calc(100vh-400px))] min-h-[290px] max-sm:h-[420px]">
             <Islands3D process={proc} active={i} onSelect={(k) => { if (!walking) select(k) }} hover={hover} onHover={setHover} roleFilter={role} zoomLevel={zoom} avatarLabel={walking ? 'Me' : 'I am here'}
@@ -154,15 +201,16 @@ function ProcessView({ proc }: { proc: Process }) {
             )}
             </div>
             {open && !walking && stage && <StagePanel proc={proc} k={i} onClose={zoomOut} onNext={next} selStep={selStep} onStep={(id) => setSelStep((x) => x === id ? null : id)} onHoverStep={setHoverStep} />}
-            {walking && <WalkCard proc={proc} w={w} onClose={stopWalk} />}
+            {walking && <WalkCard proc={proc} w={w} scopeRole={proc.roles.find((r) => r.id === role)} mineOnly={!!walkRole} onScope={(m) => setWalkAll(!m)} onClose={stopWalk} />}
             {asking && <AskPanel proc={proc} onClose={() => setAsking(false)} onShowStage={(k) => { setAsking(false); setWalking(false); select(k) }} />}
 
           </div>
+          )}
 
           {myPart && role && <MyPart proc={proc} roleId={role} onRole={setRole} onOpen={(stageIdx, stepId) => { setWalking(false); select(stageIdx); setSelStep(stepId) }} />}
 
           {n > 0 && (
-            <div className="glass relative z-[1] flex flex-col gap-4 rounded-[26px] px-5 py-5">
+            <div className="glass relative z-[1] flex flex-col gap-4 rounded-[26px] px-5 py-5 print:hidden">
               <div className="flex flex-wrap items-center gap-3">
                 <Share2 size={20} className="text-primary" aria-hidden />
                 <h2 className="m-0 text-lg font-extrabold">Process journey</h2>
@@ -170,13 +218,13 @@ function ProcessView({ proc }: { proc: Process }) {
                 <div className="flex-1" />
                 <Button variant="outlined" size="iconLg" aria-label="Previous stage" onClick={() => setI((x) => Math.max(0, x - 1))}><ChevronLeft size={18} /></Button>
                 <Button variant="outlined" size="iconLg" aria-label="Next stage" onClick={next}><ChevronRight size={18} /></Button>
-                <Button onClick={() => select(focus === null ? i : (i + 1) % n)}><Play size={15} fill="#fff" />{focus === null ? 'Zoom in' : i === n - 1 ? 'Back to start' : 'Next stage'}</Button>
+                <Button onClick={() => select(simple ? (i + 1) % n : focus === null ? i : (i + 1) % n)}><Play size={15} fill="#fff" />{simple ? (i === n - 1 ? 'Back to start' : 'Next stage') : focus === null ? 'Zoom in' : i === n - 1 ? 'Back to start' : 'Next stage'}</Button>
               </div>
               <div className="flex overflow-x-auto">
                 {proc.stages.map((s, k) => {
                   const done = walking ? (w.walk.finished || k < walkStage) : k <= i
                   return (
-                    <button key={s.id} onClick={() => select(k)} className="flex min-w-[104px] flex-1 cursor-pointer flex-col items-center gap-2 border-0 bg-transparent px-0.5 text-center text-[13px] font-bold leading-tight text-on-surface">
+                    <button key={s.id} onClick={() => select(k)} className={cn("flex min-w-[104px] flex-1 cursor-pointer flex-col items-center gap-2 border-0 bg-transparent px-0.5 text-center text-[13px] font-bold leading-tight text-on-surface transition-opacity", role && !stageRoles(proc, s).some((r) => r.id === role) && "opacity-30")}>
                       <span className="flex w-full items-center">
                         <span className="h-[3px] flex-1 rounded" style={{ background: k === 0 ? 'transparent' : done ? proc.stages[k - 1].color : '#D3D7E2' }} />
                         <span className="flex h-11 w-11 items-center justify-center rounded-full text-base font-extrabold transition-all"
@@ -197,7 +245,7 @@ function ProcessView({ proc }: { proc: Process }) {
         <div className="flex flex-wrap items-center gap-4">
           <h2 className="m-0 text-2xl font-extrabold">More about this process</h2>
           <div className="flex-1" />
-          <Segmented label="View" value={view} onChange={setView} options={[{ id: 'overview', label: 'Overview' }, { id: 'role', label: 'My role' }, { id: 'owner', label: 'Owner' }]} />
+          <div className="print:hidden"><Segmented label="View" value={view} onChange={setView} options={[{ id: 'overview', label: 'Overview' }, { id: 'role', label: 'My role' }, { id: 'owner', label: 'Owner' }]} /></div>
         </div>
         {view === 'overview' && <Overview proc={proc} />}
         {view === 'role' && <RoleView proc={proc} initial={proc.roles.find((r) => r.name === myRole)?.id ?? proc.roles[0]?.id} />}
@@ -205,6 +253,11 @@ function ProcessView({ proc }: { proc: Process }) {
       </main>
     </div>
   )
+}
+
+/** Can this browser draw 3D? If not, the simple view is used. */
+function hasWebGL() {
+  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')) } catch { return false }
 }
 
 const Person = ({ label, name, bg, fg }: { label: string; name: string; bg: string; fg: string }) => (
@@ -222,16 +275,6 @@ const RoleChip = ({ on, color, name, onClick }: { on: boolean; color: string; na
   </button>
 )
 
-/** Opens a library item: its link, the Process Hub process it stands for, or nothing yet. */
-function ResourceLink({ it, className, children }: { it: LibraryItem; className: string; children: React.ReactNode }) {
-  const processes = useData((st) => st.processes)
-  if (it.category === 'process') {
-    const target = processes.find((p) => p.id === it.processId || p.title.toLowerCase() === it.title.toLowerCase())
-    if (target) return <Link to={`/process/${target.id}`} className={className}>{children}</Link>
-  }
-  if (it.url) return <a href={it.url} target="_blank" rel="noreferrer" className={className}>{children}</a>
-  return <a href="#" onClick={(e) => e.preventDefault()} title="No link added yet" className={className}>{children}</a>
-}
 
 function StagePanel({ proc, k, onClose, onNext, selStep, onStep, onHoverStep }: { proc: Process; k: number; onClose: () => void; onNext: () => void; selStep: string | null; onStep: (id: string) => void; onHoverStep: (id: string | null) => void }) {
   const library = useData((st) => st.library)

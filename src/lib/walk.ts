@@ -37,9 +37,43 @@ export function nextStep(p: Process, id: string, answer?: 'yes' | 'no') {
 
 const stageOf = (p: Process, id?: string) => p.steps.find((s) => s.id === id)?.stageId
 
-export function useWalk(p: Process) {
-  const key = `ph-walk-${p.id}`
-  const [w, setW] = useState<WalkState>(() => {
+export interface Handoff {
+  /** other people's steps, in the order the work goes through them (taking "Yes" at their checks) */
+  steps: Step[]
+  /** the next step for this role, or undefined when the process ends first */
+  target?: string
+  /** checks by others that can send the work back to this role */
+  warnings: { check: Step; backTo: Step }[]
+}
+
+/** From `fromId`, follow the work through other people's steps until it reaches `roleId` again (or the end). */
+export function handoffRun(p: Process, fromId: string, roleId: string): Handoff {
+  const byId = (id?: string) => p.steps.find((x) => x.id === id)
+  const steps: Step[] = [], warnings: Handoff['warnings'] = [], seen = new Set<string>()
+  let cur = byId(fromId)
+  while (cur && work(cur) && cur.roleId !== roleId && !seen.has(cur.id)) {
+    seen.add(cur.id); steps.push(cur)
+    if (cur.kind === 'decision') {
+      // where does "No" lead? if it reaches this role's step before coming back, warn them
+      let n = nextStep(p, cur.id, 'no'), hops = 0
+      const back = new Set<string>([cur.id])
+      while (n && hops++ < 8 && !back.has(n.to)) {
+        const t = byId(n.to)
+        if (!t || !work(t)) break
+        if (t.roleId === roleId) { warnings.push({ check: cur, backTo: t }); break }
+        back.add(t.id); n = nextStep(p, t.id)
+      }
+    }
+    const nx = nextStep(p, cur.id, cur.kind === 'decision' ? 'yes' : undefined)
+    cur = nx ? byId(nx.to) : undefined
+  }
+  return { steps, target: cur && work(cur) && cur.roleId === roleId ? cur.id : undefined, warnings }
+}
+
+/** `roleId`: walk only this role's steps (other people's are summed up as hand-offs). Progress is saved per role. */
+export function useWalk(p: Process, roleId: string | null = null) {
+  const key = `ph-walk-${p.id}${roleId ? `-${roleId}` : ''}`
+  const load = (): WalkState => {
     try {
       const raw = localStorage.getItem(key)
       const saved: WalkState = raw ? { ...EMPTY, ...JSON.parse(raw), nonce: 0 } : EMPTY
@@ -47,8 +81,16 @@ export function useWalk(p: Process) {
       if (saved.current && !p.steps.some((x) => x.id === saved.current)) return EMPTY
       return saved
     } catch { return EMPTY }
+  }
+  const [state, setState] = useState<{ key: string; w: WalkState }>(() => ({ key, w: load() }))
+  // switching role (or between "my steps" and "whole process") picks up that walk's own saved progress
+  const w = state.key === key ? state.w : load()
+  useEffect(() => { if (state.key !== key) setState({ key, w: load() }) }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
+  const setW = (fn: WalkState | ((s: WalkState) => WalkState)) => setState((st) => {
+    const cur = st.key === key ? st.w : load()
+    return { key, w: typeof fn === 'function' ? fn(cur) : fn }
   })
-  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(w)) } catch { /* private mode: keep it in memory */ } }, [key, w])
+  useEffect(() => { if (state.key === key) try { localStorage.setItem(key, JSON.stringify(state.w)) } catch { /* private mode: keep it in memory */ } }, [key, state])
 
   const start = () => setW({ ...EMPTY, started: true, current: firstStep(p) })
   const advance = (answer?: 'yes' | 'no') => setW((s) => {
@@ -67,12 +109,22 @@ export function useWalk(p: Process) {
     if (!last) return s
     return { ...s, finished: false, current: last.from, done: s.done.filter((d) => d !== last.from), trail: s.trail.slice(0, -1) }
   })
+  /** Jump over a hand-off: other people's steps count as done, and the walk carries on at `target` (or finishes). */
+  const skipTo = (run: Handoff) => setW((s) => {
+    if (!s.current || !run.steps.length) return s
+    const ids = run.steps.map((x) => x.id)
+    const hops = run.steps.map((x, i) => ({ from: x.id, to: run.steps[i + 1]?.id ?? run.target ?? 'end' }))
+    const done = [...new Set([...s.done, ...ids])]
+    if (!run.target) return { ...s, done, finished: true, current: undefined, trail: [...s.trail, ...hops], nonce: s.nonce + 1 }
+    return { ...s, done, current: run.target, trail: [...s.trail, ...hops], nonce: stageOf(p, run.target) !== stageOf(p, s.current) ? s.nonce + 1 : s.nonce }
+  })
   const reset = () => setW(EMPTY)
-  const total = workSteps(p).length
-  const doneCount = new Set(s_done(w)).size
-  return { walk: w, start, advance, back, reset, total, doneCount, wentBack: w.trail.filter((t) => /^no$/i.test(t.label ?? '')).length }
+  const mine = roleId ? workSteps(p).filter((x) => x.roleId === roleId) : workSteps(p)
+  const total = mine.length
+  const doneCount = mine.filter((x) => w.done.includes(x.id)).length
+  const handoff = roleId && w.current && p.steps.find((x) => x.id === w.current)?.roleId !== roleId ? handoffRun(p, w.current, roleId) : null
+  return { walk: w, start, advance, back, reset, skipTo, handoff, roleId, total, doneCount, wentBack: w.trail.filter((t) => /^no$/i.test(t.label ?? '')).length }
 }
-const s_done = (w: WalkState) => w.done
 
 export const savedWalk = (id: string): WalkState | null => {
   try { const raw = localStorage.getItem(`ph-walk-${id}`); return raw ? JSON.parse(raw) : null } catch { return null }
