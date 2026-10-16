@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* Material 3 colour roles (seeded from Scope blue), exposed as Tailwind colours */
+@theme {
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+
+  --color-primary: #1d4ed8;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #dfe7ff;
+  --color-on-primary-container: #0a2472;
+  --color-secondary: #15803d;
+  --color-secondary-container: #d3f2de;
+  --color-on-secondary-container: #0b3d20;
+  --color-tertiary: #c2410c;
+  --color-tertiary-container: #ffe9d9;
+  --color-error: #b42318;
+  --color-error-container: #fde3e1;
+  --color-surface: #f6f7fb;
+  --color-surface-low: #eef0f7;
+  --color-surface-mid: #e5e8f2;
+  --color-surface-high: #dde1ec;
+  --color-on-surface: #151a25;
+  --color-on-surface-variant: #4a5163;
+  --color-outline: #737a8c;
+  --color-outline-variant: #d3d7e2;
+  --color-ink: #0f172a;
+
+  --radius-xl2: 1.25rem;
+  --radius-xl3: 1.75rem;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 30px rgba(30, 58, 138, 0.1);
+}
+
+.dot-grid {
+  background-color: #eef3ff;
+  background-image: radial-gradient(ellipse at 50% 0%, #ffffff 0%, rgba(255, 255, 255, 0) 60%),
+    radial-gradient(rgba(29, 78, 216, 0.1) 1px, transparent 1px);
+  background-size: 100% 100%, 22px 22px;
+}
+
+.lbl {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+:focus-visible { outline: 3px solid #93b4ff; outline-offset: 2px; }
+
+/* React Flow tweaks */
+.react-flow__handle { width: 10px; height: 10px; background: #1d4ed8; border: 2px solid #fff; opacity: 0; transition: opacity .15s; }
+.react-flow__node:hover .react-flow__handle, .react-flow__node.selected .react-flow__handle, .react-flow__handle.connectingfrom, .react-flow__handle.connectingto { opacity: 1; }
