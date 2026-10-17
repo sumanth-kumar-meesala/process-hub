@@ -19,7 +19,7 @@ export function WalkCard({ proc, w, onClose, docked = false, scopeRole, mineOnly
   onScope?: (mine: boolean) => void
 }) {
   const library = useData((s) => s.library)
-  const { walk, total, doneCount, wentBack, handoff } = w
+  const { walk, total, doneCount, wentBack, handoff, offPath, pathIds } = w
   const me = mineOnly ? scopeRole : null
   const step = proc.steps.find((s) => s.id === walk.current)
   const stageIdx = step ? proc.stages.findIndex((s) => s.id === step.stageId) : proc.stages.length - 1
@@ -29,7 +29,6 @@ export function WalkCard({ proc, w, onClose, docked = false, scopeRole, mineOnly
   const color = stage?.color ?? '#0F766E'
   const res = step ? stepResources(step, library) : []
   const dec = step?.kind === 'decision'
-  const stageSteps = proc.steps.filter((x) => x.stageId === step?.stageId && (x.kind === 'step' || x.kind === 'decision'))
   const last = walk.trail[walk.trail.length - 1]
   const cameBack = last && /^no$/i.test(last.label ?? '') && last.to === walk.current
 
@@ -52,13 +51,13 @@ export function WalkCard({ proc, w, onClose, docked = false, scopeRole, mineOnly
         )}
         {/* progress: one segment per step (just yours, when walking your part), filling as you go */}
         <div className="flex gap-[3px]" aria-label={`${doneCount} of ${total} steps done`}>
-          {proc.steps.filter((s) => (s.kind === 'step' || s.kind === 'decision') && (!me || s.roleId === me.id)).map((s) => {
+          {proc.steps.filter((s) => pathIds.has(s.id)).map((s) => {
             const c = proc.stages.find((x) => x.id === s.stageId)?.color ?? color
             const d = walk.done.includes(s.id), cur = s.id === walk.current
             return <span key={s.id} className="h-2 flex-1 rounded-full transition-all duration-500" style={{ background: d ? c : cur ? tint(c, 0.5) : '#fff', boxShadow: cur ? `0 0 0 2px ${c}` : undefined }} />
           })}
         </div>
-        <span className="text-[13px] font-semibold text-on-surface-variant">{walk.finished ? (me ? 'All your steps done' : 'Every step done') : `${doneCount} of ${total} ${me ? 'of your steps' : 'steps'} done · Stage ${stageIdx + 1}: ${stage?.short}`} · {pct}%</span>
+        <span className="text-[13px] font-semibold text-on-surface-variant">{walk.finished ? `All ${total} ${me ? 'of your steps' : 'steps'} done` : handoff && me ? (handoff.target ? `Your next step: ${Math.min(doneCount + 1, total)} of ${total}` : `All ${total} of your steps done`) : `${me ? 'Your step' : 'Step'} ${Math.min(doneCount + 1, total)} of ${total} · Stage ${stageIdx + 1}: ${stage?.short}`} · {pct}% done</span>
       </div>
 
       <div className="flex flex-col gap-4 overflow-y-auto px-5 pb-5 pt-4">
@@ -66,7 +65,13 @@ export function WalkCard({ proc, w, onClose, docked = false, scopeRole, mineOnly
           <div className="walk-pop flex flex-col items-center gap-3 py-2 text-center">
             <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#D3F2DE]"><PartyPopper size={32} className="text-[#0F766E]" /></span>
             <h3 className="m-0 text-xl font-extrabold">{me ? `You walked your part as ${me.name}!` : 'You walked the whole process!'}</h3>
-            <p className="m-0 text-sm text-on-surface-variant">{total} {me ? 'of your' : ''} steps across {proc.stages.length} stages{wentBack ? ` — and you went back ${wentBack} time${wentBack > 1 ? 's' : ''} when a check said no, just like real life.` : '.'}</p>
+            <p className="m-0 text-sm text-on-surface-variant">{total} {me ? 'of your ' : ''}steps across {proc.stages.length} stages{wentBack ? ` — and you went back ${wentBack} time${wentBack > 1 ? 's' : ''} when a check said no, just like real life.` : '.'}</p>
+            {offPath.length > 0 && (
+              <div className="flex w-full flex-col gap-1 rounded-2xl bg-[#FFF7E6] p-3 text-left text-[13px] text-[#7A3A00]">
+                <b>Only when a check says no{me ? ', you would also' : ''}:</b>
+                {offPath.map((x) => <span key={x.id}>• {x.label}{me ? '' : ` — ${proc.roles.find((r) => r.id === x.roleId)?.name ?? ''}`}</span>)}
+              </div>
+            )}
             {proc.outcomes.length > 0 && <div className="flex w-full flex-col gap-1.5 rounded-2xl bg-surface-low p-3 text-left"><span className="lbl">Now it's done when</span>{proc.outcomes.map((o) => <span key={o} className="flex items-start gap-2 text-sm"><Check size={16} className="mt-0.5 flex-none text-secondary" />{o}</span>)}</div>}
             <div className="flex gap-2"><Button onClick={w.start}><RotateCcw size={15} />Walk again</Button><Button variant="outlined" onClick={onClose}>Close</Button></div>
           </div>
@@ -76,7 +81,7 @@ export function WalkCard({ proc, w, onClose, docked = false, scopeRole, mineOnly
           <div key={step.id} className="walk-pop flex flex-col gap-4">
             {cameBack && <div className="flex items-center gap-2 rounded-xl bg-[#FFEDD5] px-3 py-2 text-[13px] font-semibold text-[#9A3412]"><Undo2 size={15} />The check said no, so this step needs doing again.</div>}
             <div className="flex items-start gap-3">
-              <span className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl text-lg font-extrabold text-white" style={{ background: dec ? '#D97706' : color }}>{dec ? '?' : stageSteps.findIndex((x) => x.id === step.id) + 1}</span>
+              <span className="flex h-11 w-11 flex-none items-center justify-center rounded-2xl text-lg font-extrabold text-white" style={{ background: dec ? '#D97706' : color }}>{dec ? '?' : Math.min(doneCount + 1, total)}</span>
               <div className="flex flex-col gap-1">
                 <h3 className="m-0 text-lg font-extrabold leading-snug"><Terms text={step.label} /></h3>
                 {role && <span className="text-[13px] font-semibold text-on-surface-variant">{roleKind(role) === 'agent' ? '🤖 Done automatically by ' : 'Done by '}{role.name}</span>}

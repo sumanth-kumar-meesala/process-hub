@@ -20,6 +20,7 @@ import { applyOps, summariseNotes, type Op } from '@/ai/ops'
 import { specToProcess } from '@/ai/build'
 import { askGroq, clarifyBuild, isBuildRequest, foldHistory, buildMessages, INPUT_BUDGET, type ChatMsg, type AskResult, type Question } from '@/ai/groq'
 import { cn } from '@/lib/utils'
+import { useAiKey } from '@/ai/config'
 
 /* ---------- layout grid: columns = stages, rows (lanes) = roles ---------- */
 const LBL = 150, COL = 250, HDR = 56, LANE = 112, NW = 156, NH = 50, CW = 34
@@ -219,7 +220,8 @@ type Asking = { request: string; items: Question[]; picks: Record<number, string
 
 /* ===================================================================== */
 function Editor({ initial }: { initial: Process }) {
-  const { persona, groqKey, model } = useSession()
+  const { persona, model } = useSession()
+  const { key: groqKey } = useAiKey()
   const upsert = useData((s) => s.upsert)
   const remove = useData((s) => s.remove)
   const library = useData((s) => s.library)

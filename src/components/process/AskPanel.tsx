@@ -5,13 +5,15 @@ import { Button } from '@/components/ui/button'
 import { askAbout, type ChatMsg } from '@/ai/groq'
 import { useData, useSession } from '@/store/store'
 import { cn } from '@/lib/utils'
+import { useAiKey } from '@/ai/config'
 import type { Process } from '@/lib/types'
 
 interface Msg extends ChatMsg { stage?: number | null }
 
 /** Anyone can ask questions about the process they are looking at. */
 export function AskPanel({ proc, onClose, onShowStage, docked = false }: { proc: Process; onClose: () => void; onShowStage: (k: number) => void; docked?: boolean }) {
-  const { groqKey, model, persona } = useSession()
+  const { model, persona } = useSession()
+  const { key: groqKey } = useAiKey()
   const library = useData((s) => s.library)
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [text, setText] = useState('')

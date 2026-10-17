@@ -11,6 +11,7 @@ import { CATEGORIES } from '@/lib/resources'
 import { displayName } from '@/lib/derive'
 import { INPUT_BUDGET, KEEP_MESSAGES, testGroq } from '@/ai/groq'
 import { cn } from '@/lib/utils'
+import { SITE_KEY, useAiKey } from '@/ai/config'
 
 const MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
 type Tab = 'ai' | 'people' | 'processes' | 'library' | 'systems' | 'glossary'
@@ -50,13 +51,14 @@ const inputCls = 'h-12 w-full rounded-[14px] border border-outline-variant bg-wh
 
 function AiSettings() {
   const { groqKey, model, setGroq } = useSession()
+  const { source } = useAiKey()
   const [key, setKey] = useState(groqKey)
   const [m, setM] = useState(model)
   const [state, setState] = useState<{ kind: 'idle' | 'ok' | 'err' | 'busy'; text?: string }>({ kind: 'idle' })
   const save = () => { setGroq(key.trim(), m.trim()); setState({ kind: 'ok', text: 'Saved in this browser.' }) }
   const test = async () => {
     setState({ kind: 'busy', text: 'Testing…' })
-    try { await testGroq(key.trim(), m.trim()); setState({ kind: 'ok', text: 'Connected — Groq answered.' }) }
+    try { await testGroq(key.trim() || SITE_KEY, m.trim()); setState({ kind: 'ok', text: 'Connected — Groq answered.' }) }
     catch (e) { setState({ kind: 'err', text: `Couldn't connect: ${(e as Error).message}` }) }
   }
   return (
@@ -65,12 +67,18 @@ function AiSettings() {
         <div className="flex items-center gap-3.5">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary"><Sparkles size={24} color="#fff" /></span>
           <div className="flex-1"><h1 className="m-0 text-2xl font-extrabold">AI assistant</h1><div className="text-sm text-on-surface-variant">Used by the Builder to create and change processes</div></div>
-          <span className={cn('inline-flex h-[30px] items-center gap-1.5 rounded-full px-3 text-[13px] font-bold', groqKey ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-mid')}>
-            <span className={cn('h-2 w-2 rounded-full', groqKey ? 'bg-secondary' : 'bg-outline')} />{groqKey ? 'Key saved' : 'No key yet'}
+          <span className={cn('inline-flex h-[30px] items-center gap-1.5 rounded-full px-3 text-[13px] font-bold', source !== 'none' ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-mid')}>
+            <span className={cn('h-2 w-2 rounded-full', source !== 'none' ? 'bg-secondary' : 'bg-outline')} />{source === 'browser' ? 'Using this browser’s key' : source === 'site' ? 'Using the shared key' : 'No key yet'}
           </span>
         </div>
+        <div className={cn('flex items-start gap-3 rounded-[18px] px-4 py-3 text-[13px] leading-normal', SITE_KEY ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-low text-on-surface-variant')}>
+          <span className="mt-1 h-2.5 w-2.5 flex-none rounded-full" style={{ background: SITE_KEY ? '#16A34A' : '#94A3B8' }} />
+          <span>{SITE_KEY
+            ? <><b>Shared key: on.</b> This site was built with the GitHub secret <code>GROQ_API_KEY</code>, so everyone can use the AI without adding a key. A key saved below is used instead, in this browser only.</>
+            : <><b>Shared key: off.</b> To give everyone the AI, add a repository secret named <code>GROQ_API_KEY</code> in GitHub (Settings → Secrets and variables → Actions) and publish with the GitHub Actions workflow. Until then, add a key below for this browser.</>}</span>
+        </div>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4">
-          <label className="flex flex-col gap-1.5 text-[13px] font-bold text-on-surface-variant">Groq API key
+          <label className="flex flex-col gap-1.5 text-[13px] font-bold text-on-surface-variant">Groq API key for this browser (optional{SITE_KEY ? ' — overrides the shared key' : ''})
             <input type="password" className={inputCls} value={key} onChange={(e) => setKey(e.target.value)} placeholder="gsk_…" autoComplete="off" aria-describedby="keynote" />
           </label>
           <label className="flex flex-col gap-1.5 text-[13px] font-bold text-on-surface-variant">Model
@@ -78,10 +86,10 @@ function AiSettings() {
             <datalist id="models">{MODELS.map((x) => <option key={x} value={x} />)}</datalist>
           </label>
         </div>
-        <p id="keynote" className="m-0 text-[13px] leading-normal text-on-surface-variant">The key stays in this browser only (it is never put in the website or the GitHub repo). Anyone using this browser can use it, so only save it on your own device. Check your current model names and limits in your Groq console.</p>
+        <p id="keynote" className="m-0 text-[13px] leading-normal text-on-surface-variant">A key saved here stays in this browser only. Anyone using this browser can use it, so only save it on your own device. Check your current model names and limits in your Groq console.</p>
         <div className="flex flex-wrap items-center gap-2.5">
           <Button onClick={save}>Save</Button>
-          <Button variant="tonal" onClick={test} disabled={!key || state.kind === 'busy'}>Test connection</Button>
+          <Button variant="tonal" onClick={test} disabled={(!key && !SITE_KEY) || state.kind === 'busy'}>Test connection</Button>
           <Button variant="danger" onClick={() => { setKey(''); setGroq('', m); setState({ kind: 'ok', text: 'Key removed.' }) }}>Remove key</Button>
           {state.text && <span className={cn('text-sm font-semibold', state.kind === 'err' ? 'text-error' : 'text-secondary')}>{state.text}</span>}
         </div>

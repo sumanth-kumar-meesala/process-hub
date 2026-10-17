@@ -27,3 +27,8 @@ dist-ssr
 /*.jpg
 /*.jpeg
 /*.png
+
+# Local secrets (e.g. VITE_GROQ_API_KEY) — never commit
+.env
+.env.*
+!.env.example

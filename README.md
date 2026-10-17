@@ -26,7 +26,11 @@ Edits and new processes are saved in each browser. To share them with everyone: 
 
 ## AI assistant (Groq) and its limits
 
-- The Global Admin pastes the Groq API key in **Admin → AI assistant**. It is stored only in that browser's localStorage — **never commit a key to this repo**: GitHub Pages sites are public and anyone could read it.
+- **Shared key for everyone (GitHub secret):** in the repo, add a secret named `GROQ_API_KEY` — either under **Settings → Environments → github-pages → Environment secrets** (the workflow builds inside that environment) or under **Settings → Secrets and variables → Actions → Repository secrets** — paste the key, and publish with the GitHub Actions workflow (Option B below). The workflow passes it to the build as `VITE_GROQ_API_KEY`, so every visitor can use the AI without adding a key. **Admin → AI assistant** shows "Shared key: on" when it worked.
+  - The key is built into the site's JavaScript, so anyone who opens the published site can find it. Use a key you can limit or replace, keep the repo/site private where you can, and rotate the key in the Groq console if it leaks.
+  - Building on your own computer: copy `.env.example` to `.env.local` and fill in `VITE_GROQ_API_KEY` (`.env.local` is never committed). `npm run deploy` (Option A) builds with whatever is in `.env.local`.
+- **Key for one browser:** the Global Admin can also paste a key in **Admin → AI assistant**. It is stored only in that browser and wins over the shared key.
+- **Never commit a key to this repo** — use the secret or `.env.local`.
 - Requests are kept small for the free tier (about 8k tokens/minute on some models):
   - the process is sent as a compact text outline, not the diagram
   - only the last 6 chat messages are sent in full; older ones are folded into a short summary
@@ -58,7 +62,7 @@ npm run build      # production build in dist/
 
 **Option B — automatic on every push**
 
-Move `setup/github-pages-workflow.yml` to `.github/workflows/deploy.yml`, push, and set **Settings → Pages → Source: GitHub Actions**.
+Move `setup/github-pages-workflow.yml` to `.github/workflows/deploy.yml`, push, and set **Settings → Pages → Source: GitHub Actions**. If the repository secret `GROQ_API_KEY` exists, the AI is switched on for everyone.
 
 **First push**
 

@@ -37,6 +37,19 @@ export function nextStep(p: Process, id: string, answer?: 'yes' | 'no') {
 
 const stageOf = (p: Process, id?: string) => p.steps.find((s) => s.id === id)?.stageId
 
+/** The steps the work goes through when every check says "Yes" — the usual path, in order. */
+export function usualPath(p: Process): Step[] {
+  const out: Step[] = [], seen = new Set<string>()
+  let id: string | undefined = firstStep(p)
+  while (id && !seen.has(id)) {
+    const st = p.steps.find((x) => x.id === id)
+    if (!st || !work(st)) break
+    seen.add(id); out.push(st)
+    id = nextStep(p, id, st.kind === 'decision' ? 'yes' : undefined)?.to
+  }
+  return out
+}
+
 export interface Handoff {
   /** other people's steps, in the order the work goes through them (taking "Yes" at their checks) */
   steps: Step[]
@@ -119,11 +132,16 @@ export function useWalk(p: Process, roleId: string | null = null) {
     return { ...s, done, current: run.target, trail: [...s.trail, ...hops], nonce: stageOf(p, run.target) !== stageOf(p, s.current) ? s.nonce + 1 : s.nonce }
   })
   const reset = () => setW(EMPTY)
-  const mine = roleId ? workSteps(p).filter((x) => x.roleId === roleId) : workSteps(p)
-  const total = mine.length
-  const doneCount = mine.filter((x) => w.done.includes(x.id)).length
+  // count the steps on the path this walk takes: the usual path, plus any extra steps a "No" sent you through
+  const usual = usualPath(p)
+  const onPath = new Set([...usual.map((x) => x.id), ...w.done, ...(w.current ? [w.current] : [])])
+  const mineIds = new Set(workSteps(p).filter((x) => onPath.has(x.id) && (!roleId || x.roleId === roleId)).map((x) => x.id))
+  const total = mineIds.size
+  const doneCount = w.finished ? total : [...mineIds].filter((id) => w.done.includes(id)).length
+  /** steps that only happen when a check says "No" (not walked this time) */
+  const offPath = workSteps(p).filter((x) => !onPath.has(x.id) && (!roleId || x.roleId === roleId))
   const handoff = roleId && w.current && p.steps.find((x) => x.id === w.current)?.roleId !== roleId ? handoffRun(p, w.current, roleId) : null
-  return { walk: w, start, advance, back, reset, skipTo, handoff, roleId, total, doneCount, wentBack: w.trail.filter((t) => /^no$/i.test(t.label ?? '')).length }
+  return { walk: w, start, advance, back, reset, skipTo, handoff, roleId, total, doneCount, offPath, pathIds: mineIds, wentBack: w.trail.filter((t) => /^no$/i.test(t.label ?? '')).length }
 }
 
 export const savedWalk = (id: string): WalkState | null => {
