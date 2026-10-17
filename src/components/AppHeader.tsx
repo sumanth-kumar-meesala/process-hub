@@ -20,7 +20,6 @@ export function AppHeader({ children }: { children?: React.ReactNode }) {
   const { persona, setPersona } = useSession()
   const nav = [
     { to: '/', label: 'Find a process', show: true },
-    { to: '/ideas', label: 'Ideas', show: true },
     { to: '/builder', label: 'Builder', show: canBuild(persona) },
     { to: '/admin', label: 'Admin', show: persona === 'admin' },
   ].filter((n) => n.show)
