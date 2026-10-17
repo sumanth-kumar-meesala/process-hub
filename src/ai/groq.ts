@@ -110,7 +110,7 @@ export class GroqError extends Error {
   constructor(msg: string, status?: number) { super(msg); this.status = status }
 }
 
-async function callGroq(key: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<{ text: string; truncated: boolean }> {
+export async function callGroq(key: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<{ text: string; truncated: boolean }> {
   const body = JSON.stringify(payload)
   for (let attempt = 0; attempt < 2; attempt++) {
     const res = await fetch(GROQ_URL, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body, signal })
@@ -133,7 +133,7 @@ async function callGroq(key: string, payload: Record<string, unknown>, signal?: 
   throw new GroqError('Groq is busy (rate limit reached). Wait a minute and try again.', 429)
 }
 
-const tuning = (model: string): Record<string, unknown> => {
+export const tuning = (model: string): Record<string, unknown> => {
   // reasoning models spend output tokens "thinking" — keep that short so the answer isn't cut off
   if (/gpt-oss/i.test(model)) return { reasoning_effort: 'low' }
   if (/qwen|deepseek/i.test(model)) return { reasoning_format: 'hidden' }

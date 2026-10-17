@@ -7,6 +7,7 @@ import { SEED_GLOSSARY, type Term } from '@/data/glossary'
 import { SEED_SYSTEMS, type InternalSystem } from '@/data/systems'
 import { autoAssign } from '@/lib/resources'
 import { fixStageNames } from '@/lib/derive'
+import type { Idea } from '@/lib/ideas'
 import type { LibraryItem, Persona, Process } from '@/lib/types'
 
 /** IndexedDB-backed storage: the app's own small database, kept in the browser. */
@@ -26,6 +27,10 @@ interface DataState {
   setGlossary: (g: Term[]) => void
   systems: InternalSystem[]
   setSystems: (s: InternalSystem[]) => void
+  ideas: Idea[]
+  addIdeas: (i: Idea[]) => void
+  updateIdea: (id: string, patch: Partial<Idea>) => void
+  removeIdea: (id: string) => void
   addLibraryItems: (items: LibraryItem[]) => void
   updateLibraryItem: (id: string, patch: Partial<LibraryItem>) => void
   removeLibraryItem: (id: string) => void
@@ -54,6 +59,10 @@ export const useData = create<DataState>()(
       glossary: SEED_GLOSSARY,
       systems: SEED_SYSTEMS,
       setSystems: (systems) => setS({ systems }),
+      ideas: [],
+      addIdeas: (items) => setS((s) => ({ ideas: [...items.filter((i) => !s.ideas.some((x) => x.title.toLowerCase() === i.title.toLowerCase())), ...s.ideas] })),
+      updateIdea: (id, patch) => setS((s) => ({ ideas: s.ideas.map((x) => x.id === id ? { ...x, ...patch } : x) })),
+      removeIdea: (id) => setS((s) => ({ ideas: s.ideas.filter((x) => x.id !== id) })),
       hydrated: false,
       setGlossary: (glossary) => setS({ glossary }),
       addLibraryItems: (items) => setS((s) => ({ library: [...s.library, ...items.filter((it) => !s.library.some((x) => x.id === it.id || x.title.toLowerCase() === it.title.toLowerCase()))] })),
@@ -82,13 +91,14 @@ export const useData = create<DataState>()(
     }),
     {
       name: 'process-hub-data',
-      version: 8,
+      version: 9,
       storage: createJSONStorage(() => idbStorage),
-      partialize: (s) => ({ processes: s.processes, people: s.people, library: s.library, glossary: s.glossary, systems: s.systems }),
+      partialize: (s) => ({ processes: s.processes, people: s.people, library: s.library, glossary: s.glossary, systems: s.systems, ideas: s.ideas }),
       // v2 adds the shared resource library: untouched starter processes get the new version,
       // everything else gets library items assigned automatically
       migrate: (old, version) => {
-        const st = (old ?? {}) as { processes?: Process[]; people?: Person[]; library?: LibraryItem[]; glossary?: Term[]; systems?: InternalSystem[] }
+        const st = (old ?? {}) as { processes?: Process[]; people?: Person[]; library?: LibraryItem[]; glossary?: Term[]; systems?: InternalSystem[]; ideas?: Idea[] }
+        if (!st.ideas) st.ideas = []
         if (version < 4 && !st.glossary) st.glossary = SEED_GLOSSARY
         if (version < 5 && !st.systems) st.systems = SEED_SYSTEMS
         if (version < 6 && st.processes) st.processes = st.processes.map(fixStageNames)

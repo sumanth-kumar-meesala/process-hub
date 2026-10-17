@@ -8,6 +8,7 @@ import Discover from '@/pages/Discover'
 const ProcessPage = lazy(() => import('@/pages/ProcessPage'))
 const Builder = lazy(() => import('@/pages/Builder'))
 const Admin = lazy(() => import('@/pages/Admin'))
+const Ideas = lazy(() => import('@/pages/Ideas'))
 
 const Loading = () => <div className="p-10 text-on-surface-variant">Loading…</div>
 
@@ -21,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/builder" element={<Builder />} />
           <Route path="/builder/:id" element={<Builder />} />
           <Route path="/admin" element={<Admin />} />
+          <Route path="/ideas" element={<Ideas />} />
           <Route path="*" element={<Discover />} />
         </Routes>
       </Suspense>
