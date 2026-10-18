@@ -1112,9 +1112,9 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
           {!compact && walk && <Confetti at={avatarTarget} nonce={walk.nonce} />}
         </group>
       <ContactShadows position={[0, -2.3, 0]} scale={Math.max(cols * gap, rows * rowGap) * 1.6} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
-      {/* the quiet overview uses the mouse: scroll to zoom, drag to turn and tilt, right-drag to move (phones keep scrolling the page) */}
-      {!compact && <OrbitControls makeDefault enablePan={quiet && !narrow} screenSpacePanning enableZoom={quiet && !narrow} zoomSpeed={0.6} minZoom={8} maxZoom={160}
-        enableRotate={!quiet || !narrow} minPolarAngle={quiet ? 0.45 : 0.55} maxPolarAngle={quiet ? 1.25 : 1.15} />}
+      {/* the quiet overview: drag to move the map (zoom and tilt come from the page's buttons); phones keep scrolling the page */}
+      {!compact && <OrbitControls makeDefault enablePan={quiet && !narrow} screenSpacePanning panSpeed={0.6} mouseButtons={quiet ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN } : undefined}
+        enableZoom={false} enableRotate={!quiet} minPolarAngle={quiet ? 0.35 : 0.55} maxPolarAngle={quiet ? 1.3 : 1.15} />}
       <CameraRig span={layoutSpan(cols, rows, space).w} spanH={layoutSpan(cols, rows, space).h} level={zoomLevel} tilt={tilt} resetKey={resetKey} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
     </div>
