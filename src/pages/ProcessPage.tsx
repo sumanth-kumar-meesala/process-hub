@@ -92,7 +92,7 @@ function ProcessView({ proc }: { proc: Process }) {
                   <MousePointerClick size={14} aria-hidden />{run.roleObj ? <><b className="text-on-surface">{run.roleObj.name}</b>'s stages are highlighted · click a stage to see its steps</> : 'Click a stage to see its steps'} · drag to move the map
                 </p>
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
-                  <div className="relative -mx-2 h-[min(740px,calc(100vh-190px))] min-h-[520px] max-sm:h-[420px]">
+                  <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
                     <Islands3D process={proc} active={sel} quiet zoomLevel={zoom} tilt={tilt} resetKey={resetKey} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
                     <div role="group" aria-label="Map view" className="glass absolute bottom-3 left-3 z-[40] flex items-center gap-0 rounded-full p-0.5">
                       <MapBtn label="Zoom out" disabled={zoom <= -3} onClick={() => setZoom((z) => z - 1)}><ZoomOut size={15} /></MapBtn>
@@ -104,7 +104,7 @@ function ProcessView({ proc }: { proc: Process }) {
                       <MapBtn label="Reset the view" onClick={() => { setZoom(DEFAULT_ZOOM); setTilt(DEFAULT_TILT); setResetKey((k) => k + 1) }}><RotateCcw size={14} /></MapBtn>
                     </div>
                   </div>
-                  <div className="h-[min(740px,calc(100vh-190px))] min-h-[520px] max-lg:h-auto">
+                  <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
                     <StageSidePanel proc={proc} run={run} k={sel} onStage={openStage} />
                   </div>
                 </div>
