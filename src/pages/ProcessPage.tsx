@@ -39,7 +39,14 @@ function ProcessView({ proc }: { proc: Process }) {
   // the same "Show steps for" and saved progress as the step-by-step guide
   const run = useGuide(proc, library)
   const n = proc.stages.length
-  const openStage = (k: number) => { setSel(Math.max(0, Math.min(n - 1, k))) }
+  // choosing a stage opens its first step (the reader's own, if they have one there) — the same "where you are" as the Timeline
+  const openStage = (k: number) => {
+    const kk = Math.max(0, Math.min(n - 1, k)); setSel(kk)
+    const st = run.g.stages[kk]
+    if (st && run.cur?.stageIdx !== kk) { const x = st.usual.find((y) => y.mine) ?? st.mine[0] ?? st.all[0]; if (x) run.select(x.st.id) }
+  }
+  // Done / Yes / No can move on to another stage: the panel follows
+  useEffect(() => { if (run.cur && !run.finished) setSel(run.cur.stageIdx) }, [run.cur?.st.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // choosing someone in "Show steps for" moves the panel to their first stage
   useEffect(() => { setSel(firstFor(run.role)) }, [run.role]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -87,7 +94,7 @@ function ProcessView({ proc }: { proc: Process }) {
                     <Islands3D process={proc} active={sel} quiet tilt={-1} resetKey={resetKey} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
                   </div>
                   <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
-                    <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onStage={openStage} />
+                    <StageSidePanel proc={proc} run={run} k={sel} onStage={openStage} />
                   </div>
                 </div>
                 </>
@@ -106,7 +113,7 @@ function ProcessView({ proc }: { proc: Process }) {
                       )
                     })}
                   </ol>
-                  <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onStage={openStage} />
+                  <StageSidePanel proc={proc} run={run} k={sel} onStage={openStage} />
                 </>
               )}
             </div>

@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowRight, Bot, Check, ChevronDown, Copy, Flag, MapPin, Search, Undo2, X } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Terms } from '@/components/Terms'
-import { DocRow, StepAsk, stepUrl, useCopy, whatIfFor } from '@/components/guide/parts'
-import { roleKind, sysLabel } from '@/lib/derive'
+import { Bot, Check, ChevronDown, Flag, Search, Undo2, X } from 'lucide-react'
+import { FinishedCard, Progress, StageInfo, StepDetails } from '@/components/process/ProcessDetails'
+import { roleKind } from '@/lib/derive'
 import type { GuideStep } from '@/lib/guide'
 import { tint } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -17,7 +15,6 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
   const { g, cur } = run
   const [open, setOpen] = useState<Record<number, boolean>>(() => ({ [cur?.stageIdx ?? 0]: true }))
   const [q, setQ] = useState('')
-  const { copied, copy } = useCopy()
   const listRef = useRef<HTMLElement>(null)
   const detailRef = useRef<HTMLElement>(null)
 
@@ -38,19 +35,12 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
   const hit = (x: GuideStep) => !!needle && [x.st.label, x.role?.name ?? '', ...x.docs.map((d) => d.it.title), x.stage.short].join(' ').toLowerCase().includes(needle)
   const hits = needle ? g.steps.filter(hit).length : 0
   const allOpen = g.stages.every((s) => open[s.k])
-  const what = cur ? whatIfFor(proc, cur) : undefined
 
   return (
     <div className="mx-auto flex h-full w-full max-w-[1360px] gap-5 px-3 pb-4 sm:px-6 max-[979px]:h-auto max-[979px]:flex-col">
       {/* ---------- the timeline ---------- */}
       <nav ref={listRef} aria-label="All stages and steps" className="flex min-h-0 w-[400px] flex-none flex-col gap-3 overflow-y-auto overscroll-contain rounded-[28px] bg-white p-4 max-[979px]:w-full max-[979px]:overflow-visible">
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-baseline justify-between text-[13px]">
-            <b>{run.roleObj ? `Your part as ${run.roleObj.name}` : 'Progress'}</b>
-            <b className="text-primary">{run.finished ? `All ${run.total} done` : `${run.doneCount} of ${run.total} done`}</b>
-          </div>
-          <div className="h-2 rounded-full bg-surface-mid"><div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${run.finished ? 100 : run.pct}%` }} /></div>
-        </div>
+        <Progress run={run} />
         <label className="flex h-11 items-center gap-2 rounded-full bg-surface-low px-4 text-on-surface-variant">
           <Search size={16} aria-hidden /><span className="sr-only">Find a step</span>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Find a step, person or document" className="min-w-0 flex-1 border-0 bg-transparent text-sm text-on-surface outline-none" />
@@ -104,94 +94,12 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
       {/* ---------- the chosen step ---------- */}
       <main ref={detailRef} className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain max-[979px]:overflow-visible">
         {run.handoff && !run.finished && <p className="m-0 rounded-[18px] bg-primary-container px-5 py-3 text-sm font-semibold text-on-primary-container">{run.handoff}</p>}
-        {run.finished && (
-          <section className="flex flex-col items-start gap-3 rounded-[28px] bg-white p-8">
-            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#16A34A] text-white"><Check size={28} strokeWidth={3} /></span>
-            <h2 className="m-0 text-[26px] font-extrabold">{run.roleObj ? `That's all of your part as ${run.roleObj.name}` : 'You went through the whole process'}</h2>
-            <p className="m-0 max-w-[620px] text-[15px] leading-relaxed text-on-surface-variant">Done when: {proc.outcomes.join(' · ') || '—'}</p>
-            <Button onClick={run.restart}>Start again</Button>
-          </section>
-        )}
+        {run.finished && <FinishedCard proc={proc} run={run} />}
         {cur && !run.finished && (
-          <>
-            <section className="flex flex-col gap-5 rounded-[28px] bg-white p-6 sm:p-7">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="flex flex-col rounded-2xl px-4 py-2.5" style={{ background: tint(cur.stage.color, 0.1) }}>
-                  <span className="text-xs font-extrabold uppercase tracking-[0.06em]" style={{ color: cur.stage.color }}>Stage {cur.stageIdx + 1} · {cur.stage.short}</span>
-                  <span className="text-[13px] text-on-surface-variant">{cur.stage.title}{cur.stage.place ? <> · <MapPin size={12} className="inline align-[-1px]" /> {cur.stage.place}</> : ''}</span>
-                </div>
-                <div className="flex-1" />
-                <Button variant="outlined" size="sm" onClick={() => copy('step', stepUrl(cur.st.id))}>{copied === 'step' ? <><Check size={14} />Link copied</> : <><Copy size={14} />Copy link to this step</>}</Button>
-              </div>
-
-              <div className="flex items-start gap-4">
-                <span className={cn('flex h-14 w-14 flex-none items-center justify-center text-2xl font-extrabold text-white', cur.isCheck ? 'rounded-2xl' : 'rounded-full')}
-                  style={{ background: cur.isCheck ? '#C2410C' : cur.stage.color }}>{cur.isCheck ? '?' : cur.n ?? '!'}</span>
-                <div className="flex min-w-0 flex-col gap-1">
-                  <span className="text-[13px] font-bold text-on-surface-variant">{cur.n ? `${run.role ? 'Your step' : 'Step'} ${cur.n} of ${run.total}` : 'Only needed when a check says no'}{cur.isCheck ? ' · a check' : ''}</span>
-                  <h2 className="m-0 text-[clamp(24px,2.4vw,32px)] font-extrabold leading-tight tracking-[-0.01em]"><Terms text={cur.st.label} /></h2>
-                  <span className="flex items-center gap-2 text-[15px]">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: cur.role?.color }} />
-                    {cur.role && roleKind(cur.role) === 'agent' ? <><Bot size={15} aria-hidden />Done automatically by</> : 'Done by'} <b>{cur.role?.name ?? '—'}</b>
-                  </span>
-                </div>
-              </div>
-
-              {cur.st.why && <p className="m-0 text-[17px] leading-relaxed text-on-surface-variant"><b className="text-on-surface">Why it matters:</b> {cur.st.why}</p>}
-
-              {cur.isCheck && (
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                  <div className="rounded-2xl bg-secondary-container/60 px-4 py-3"><b className="text-xs text-secondary">IF YES</b><p className="m-0 mt-0.5 text-sm">Carry on to “{cur.yes?.label ?? 'the end — all done'}”</p></div>
-                  <div className="rounded-2xl bg-tertiary-container px-4 py-3"><b className="text-xs text-tertiary">IF NO</b><p className="m-0 mt-0.5 text-sm">{cur.no ? `${cur.noBack ? 'Go back to' : 'Go to'} “${cur.no.label}”` : 'Ask the process owner'}</p></div>
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2.5">
-                <h3 className="m-0 text-base font-extrabold">How to do it</h3>
-                {cur.st.how?.length ? (
-                  <ol className="m-0 flex list-none flex-col gap-2.5 p-0">
-                    {cur.st.how.map((h, i) => (
-                      <li key={i} className="flex items-start gap-3 text-[15px] leading-relaxed">
-                        <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full text-[13px] font-extrabold" style={{ background: tint(cur.stage.color, 0.14), color: cur.stage.color }}>{i + 1}</span>
-                        <span className="pt-0.5"><Terms text={h} /></span>
-                      </li>
-                    ))}
-                  </ol>
-                ) : <p className="m-0 rounded-2xl bg-surface-low px-4 py-3 text-sm text-on-surface-variant">{proc.owner} hasn't added instructions for this step yet.</p>}
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <h3 className="m-0 text-base font-extrabold">You'll need</h3>
-                {cur.docs.length ? cur.docs.map((d) => <DocRow key={d.it.id} d={d} usedIn={g.usedIn(d.it.id, cur.st.id)} />)
-                  : <p className="m-0 text-sm text-on-surface-variant">Nothing is linked to this step.</p>}
-                {cur.stage.systems.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[13px] text-on-surface-variant">Usually done in
-                    {cur.stage.systems.map((s) => <span key={s} className="inline-flex h-7 items-center rounded-full bg-surface-low px-3 font-semibold text-on-surface">{sysLabel(s)}</span>)}
-                  </div>
-                )}
-              </div>
-
-              {what && <p className="m-0 rounded-2xl bg-[#FFF7E6] px-4 py-3 text-sm text-[#7A3A00]"><b>When this step is needed:</b> {what}</p>}
-
-              <div className="flex flex-wrap items-center gap-2.5 border-t border-outline-variant pt-5">
-                <Button variant="outlined" size="lg" onClick={run.back} disabled={!run.canBack}>Back</Button>
-                <div className="flex-1" />
-                {cur.isCheck ? (
-                  <>
-                    <Button size="lg" className="bg-tertiary hover:bg-[#9a3412]" onClick={() => run.go('no')}>No</Button>
-                    <Button size="lg" className="bg-secondary hover:bg-[#166534]" onClick={() => run.go('yes')}>Yes, carry on<ArrowRight size={17} /></Button>
-                  </>
-                ) : <Button size="lg" onClick={() => run.go()}>Done — next step<ArrowRight size={17} /></Button>}
-              </div>
-            </section>
-
-            <section className="flex flex-col gap-3 rounded-[28px] bg-white p-6">
-              <h3 className="m-0 text-base font-extrabold">Ask about this step</h3>
-              <StepAsk key={cur.st.id} proc={proc} gs={cur} />
-            </section>
-
-            <ComingUp run={run} />
-          </>
+          <section className="flex flex-col gap-5 rounded-[28px] bg-white p-5 sm:p-6">
+            <StageInfo proc={proc} k={cur.stageIdx} roleId={run.role} />
+            <div className="px-1 sm:px-2"><StepDetails proc={proc} run={run} gs={cur} /></div>
+          </section>
         )}
       </main>
     </div>
@@ -222,23 +130,5 @@ function Row({ x, cur, done, hit, onPick }: { x: GuideStep; cur: boolean; done: 
         </span>
       )}
     </li>
-  )
-}
-
-export function ComingUp({ run }: { run: GuideViewProps['run'] }) {
-  const out: GuideStep[] = []
-  const seen = new Set<string>()
-  let x = run.g.get(run.cur?.yes?.id)
-  while (x && out.length < 3 && !seen.has(x.st.id)) { seen.add(x.st.id); if (x.mine) out.push(x); x = run.g.get(x.yes?.id) }
-  return (
-    <section className="flex flex-col gap-2 rounded-[28px] bg-white p-6">
-      <h3 className="m-0 text-base font-extrabold">Coming up</h3>
-      {out.length ? out.map((u) => (
-        <button key={u.st.id} onClick={() => run.select(u.st.id)} className="flex w-full cursor-pointer items-center gap-3 rounded-2xl border border-outline-variant bg-white px-4 py-3 text-left hover:bg-surface-low">
-          <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: u.stage.color }} />
-          <span className="flex min-w-0 flex-col"><b className="text-[15px]">{u.st.label}</b><span className="text-xs text-on-surface-variant">Stage {u.stageIdx + 1} · {u.role?.name}</span></span>
-        </button>
-      )) : <p className="m-0 text-sm text-on-surface-variant">That's the last step.</p>}
-    </section>
   )
 }

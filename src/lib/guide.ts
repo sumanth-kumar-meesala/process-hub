@@ -134,17 +134,3 @@ export function useGuide(p: Process, lib: LibraryItem[]) {
   }
 }
 export type GuideRun = ReturnType<typeof useGuide>
-
-/** Short, plain answers to the three questions people ask most about a step. */
-export function quickAnswers(gs: GuideStep) {
-  const must = gs.docs.filter((d) => d.must).map((d) => d.it.title)
-  const nice = gs.docs.filter((d) => !d.must).map((d) => d.it.title)
-  const sys = gs.stage.systems
-  return [
-    { q: 'What do I need?', a: gs.docs.length ? `${must.length ? `You must have ${must.join(' and ')}.` : `You'll use ${nice.join(' and ')}.`}${must.length && nice.length ? ` It helps to have ${nice.join(' and ')}.` : ''}${sys.length ? ` It's usually done in ${sys.join(', ')}.` : ''}` : `Nothing is linked to this step yet.${sys.length ? ` It's usually done in ${sys.join(', ')}.` : ''}` },
-    { q: 'Who gets it next?', a: gs.yes ? (gs.yes.roleId === gs.st.roleId ? `You carry on with “${gs.yes.label}”.` : `It goes to the ${gs.handTo?.name ?? 'next person'} for “${gs.yes.label}”.`) : 'Nobody — this is the last step.' },
-    gs.isCheck && gs.no
-      ? { q: 'What if the answer is no?', a: `The work ${gs.noBack ? 'goes back to' : 'goes to'} “${gs.no.label}”.` }
-      : { q: 'Why does this matter?', a: gs.st.why || 'The owner hasn\'t said yet.' },
-  ]
-}
