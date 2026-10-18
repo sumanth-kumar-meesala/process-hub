@@ -761,18 +761,18 @@ const GAP = 5.4, ROW_GAP = 11
 /** In the quiet overview, names sit just below an island's front corner so they don't cover it. */
 const LABEL_Q: V3 = [2.25, -1.55, 2.25]
 /** How far the camera has to see for a layout (screen units), used to fit it. */
-export const layoutSpan = (cols: number, rows: number, s = 1) => ({
+export const layoutSpan = (cols: number, rows: number, s = 1, rs = s) => ({
   w: (cols - 1) * GAP * s + 5.2 + (rows > 1 ? 3.5 * s : 0),
-  h: rows > 1 ? 9.5 + (rows - 1) * ROW_GAP * s * 0.5 : 11.5,
+  h: rows > 1 ? 9.5 + (rows - 1) * ROW_GAP * rs * 0.5 : 11.5,
 })
 /** Islands per row: whichever of 1, 2 or 3 rows shows the islands biggest in this space. Phones get 2 per row. */
-export function roadLayout(items: number, narrow = false, w = 1200, h = 450, s = 1) {
+export function roadLayout(items: number, narrow = false, w = 1200, h = 450, s = 1, rs = s) {
   if (narrow) return { cols: 2, rows: Math.ceil(items / 2) }
   let best = { cols: items, rows: 1 }, top = 0
   for (let r = 1; r <= 3; r++) {
     const cols = Math.ceil(items / r), rows = Math.ceil(items / cols)
     if (r > 1 && cols < 3) break
-    const sp = layoutSpan(cols, rows, s)
+    const sp = layoutSpan(cols, rows, s, rs)
     const z = Math.min(w / (sp.w * 1.04), h / sp.h)
     if (z > top * 1.04) { top = z; best = { cols, rows } } // a clear win is needed to add a row
   }
@@ -939,6 +939,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
   const items = n + 2
   // the quiet overview spreads the islands out so their names have room
   const space = quiet ? 1.45 : 1
+  // rows sit further apart still, so each stage name has clear room below its island
+  const rowSpace = quiet ? 1.85 : 1
   const gap = GAP * space
   const narrowEarly = useNarrow()
   const wrap = useRef<HTMLDivElement>(null)
@@ -949,8 +951,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
     ro.observe(el); return () => ro.disconnect()
   }, [])
   // the quiet overview reads best as one road, left to right
-  const { cols, rows } = quiet && !narrowEarly && items <= 8 && box.w >= 1100 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h, space)
-  const rowGap = ROW_GAP * space
+  const { cols, rows } = quiet && !narrowEarly && items <= 8 && box.w >= 1100 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h, space, rowSpace)
+  const rowGap = ROW_GAP * rowSpace
   const amp = rows > 1 ? 1.3 : 1.5
   // The camera looks from (1,1,1): screen-right is (1,0,-1) and screen-down is (1,0,1).
   // Islands run along a winding road: rows go left→right, then right→left, each island a little up or down.
@@ -1115,7 +1117,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
       {/* the quiet overview: drag to move the map (zoom and tilt come from the page's buttons); phones keep scrolling the page */}
       {!compact && <OrbitControls makeDefault enablePan={quiet && !narrow} screenSpacePanning panSpeed={0.6} mouseButtons={quiet ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN } : undefined}
         enableZoom={false} enableRotate={!quiet} minPolarAngle={quiet ? 0.35 : 0.55} maxPolarAngle={quiet ? 1.3 : 1.15} />}
-      <CameraRig span={layoutSpan(cols, rows, space).w} spanH={layoutSpan(cols, rows, space).h} level={zoomLevel} tilt={tilt} resetKey={resetKey} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
+      <CameraRig span={layoutSpan(cols, rows, space, rowSpace).w} spanH={layoutSpan(cols, rows, space, rowSpace).h} level={zoomLevel} tilt={tilt} resetKey={resetKey} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
     </div>
   )
