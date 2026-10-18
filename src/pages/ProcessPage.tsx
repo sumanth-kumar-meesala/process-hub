@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Check, ChevronRight, FileText, Flag, Pencil, Trophy, Users, Monitor, ShieldCheck, Share2, HeartHandshake, Undo2, MessageCircleQuestion } from 'lucide-react'
+import { MousePointerClick, ArrowRight, Check, ChevronRight, FileText, Flag, Pencil, Trophy, Users, Monitor, ShieldCheck, Share2, HeartHandshake, Undo2, MessageCircleQuestion } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { Card, Tag } from '@/components/ui/card'
@@ -83,30 +83,25 @@ function ProcessView({ proc }: { proc: Process }) {
 
         {/* ---------- the process at a glance ---------- */}
         <section className="dot-grid relative flex flex-col gap-4 overflow-clip rounded-[36px] p-4 sm:px-8 sm:py-7">
-          <div className="relative z-[1] flex flex-wrap items-center gap-x-6 gap-y-3">
-            <div className="flex min-w-[min(420px,100%)] flex-1 flex-col gap-1.5">
-              <p className="m-0 max-w-[760px] text-[16px] leading-snug text-on-surface-variant"><Terms text={proc.summary} /></p>
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-on-surface-variant">
-                <Person label="Owner" name={proc.owner} bg="#DFE7FF" fg="#0A2472" />
-                {proc.executiveOwner && <Person label="Executive" name={proc.executiveOwner} bg="#D3F2DE" fg="#0B3D20" />}
-                {proc.reviewNext && <span>Next review <b className="text-on-surface">{proc.reviewNext}</b></span>}
-              </div>
-            </div>
-            {hasSteps && <Button variant="outlined" size="lg" className="print:hidden" onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={18} />Ask a question</Button>}
+          {/* one line: what it is, who owns it, and a way to ask */}
+          <div className="relative z-[1] flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p className="m-0 min-w-[min(320px,100%)] flex-1 truncate text-[15px] text-on-surface-variant" title={proc.summary}>{proc.summary}</p>
+            <span className="text-[13px] text-on-surface-variant"><Person label="Owner" name={proc.owner} bg="#DFE7FF" fg="#0A2472" /></span>
+            {hasSteps && <Button variant="outlined" size="sm" className="print:hidden" onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={15} />Ask a question</Button>}
           </div>
 
           {n === 0 ? (
             <p className="relative z-[1] m-0 rounded-[20px] bg-white p-6 text-sm text-on-surface-variant">The owner hasn't added stages yet.</p>
           ) : (
             <div className="relative z-[1] flex flex-col gap-2">
-              <p className="m-0 text-[15px] font-semibold text-on-surface-variant">
-                {run.roleObj ? <>The stages the <b className="text-on-surface">{run.roleObj.name}</b> is part of are highlighted. </> : null}
-                {can3d ? 'Click a stage on the map to see its steps on the right.' : 'Choose a stage to see its steps.'}
-              </p>
+              {!can3d && <p className="m-0 text-sm font-semibold text-on-surface-variant">Choose a stage to see its steps.</p>}
               {can3d ? (
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
                   <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
                     <Islands3D process={proc} active={sel} quiet zoomLevel={-1} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
+                    <span className="glass pointer-events-none absolute left-3 top-1 z-[40] inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[13px] font-bold text-on-surface-variant">
+                      <MousePointerClick size={14} aria-hidden />{run.roleObj ? `${run.roleObj.name}'s stages are highlighted · click one to see its steps` : 'Click a stage to see its steps'}
+                    </span>
                   </div>
                   <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
                     {asking
