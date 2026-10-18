@@ -31,7 +31,7 @@ function ProcessView({ proc }: { proc: Process }) {
   const nav = useNavigate()
   const [hover, setHover] = useState<number | null>(null)
   // map view: zoom and tilt steps from the buttons; it starts at the standard angle. Reset also re-centres after dragging.
-  const DEFAULT_TILT = -2, DEFAULT_ZOOM = 0.5
+  const DEFAULT_TILT = -2, DEFAULT_ZOOM = 0
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [tilt, setTilt] = useState(DEFAULT_TILT)
   const [resetKey, setResetKey] = useState(0)

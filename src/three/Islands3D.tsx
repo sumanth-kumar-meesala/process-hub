@@ -940,7 +940,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
   // the quiet overview spreads the islands out so their names have room
   const space = quiet ? 1.45 : 1
   // rows sit further apart still, so each stage name has clear room below its island
-  const rowSpace = quiet ? 2 : 1
+  const rowSpace = quiet ? 2.35 : 1
   const gap = GAP * space
   const narrowEarly = useNarrow()
   const wrap = useRef<HTMLDivElement>(null)
@@ -953,7 +953,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
   // the quiet overview reads best as one road, left to right
   const { cols, rows } = quiet && !narrowEarly && items <= 8 && box.w >= 1100 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h, space, rowSpace)
   const rowGap = ROW_GAP * rowSpace
-  const amp = rows > 1 ? 1.3 : 1.5
+  // islands step up and down along the road; gentler in the overview so names don't run into neighbours
+  const amp = quiet ? 0.6 : rows > 1 ? 1.3 : 1.5
   // The camera looks from (1,1,1): screen-right is (1,0,-1) and screen-down is (1,0,1).
   // Islands run along a winding road: rows go left→right, then right→left, each island a little up or down.
   const R = Math.SQRT1_2
@@ -1076,8 +1077,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                 })()}
                 {!compact && (
                   <Html position={quiet ? LABEL_Q : [1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? (focus !== null ? 0 : 0.3) : 1 }}>
-                    <div className={quiet ? 'flex items-center gap-2 whitespace-nowrap rounded-full border-2 bg-white py-1 pl-1 pr-3.5 text-[14px] font-extrabold shadow-sm' : 'flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold'} style={{ borderColor: s.color }}>
-                      <span className={quiet ? 'flex h-7 w-7 items-center justify-center rounded-full text-[13px] text-white' : 'flex h-6 w-6 items-center justify-center rounded-full text-xs text-white'} style={{ background: s.color }}>{k + 1}</span>{s.short}
+                    <div className={quiet ? 'flex items-center gap-1.5 whitespace-nowrap rounded-full border-2 bg-white py-0.5 pl-0.5 pr-3 text-[13px] font-extrabold shadow-sm' : 'flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold'} style={{ borderColor: s.color }}>
+                      <span className={quiet ? 'flex h-6 w-6 items-center justify-center rounded-full text-[12px] text-white' : 'flex h-6 w-6 items-center justify-center rounded-full text-xs text-white'} style={{ background: s.color }}>{k + 1}</span>{s.short}
                     </div>
                   </Html>
                 )}
