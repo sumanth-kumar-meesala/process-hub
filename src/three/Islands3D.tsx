@@ -926,7 +926,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
     ro.observe(el); return () => ro.disconnect()
   }, [])
   // the quiet overview reads best as one road, left to right
-  const { cols, rows } = quiet && !narrowEarly && items <= 8 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h)
+  const { cols, rows } = quiet && !narrowEarly && items <= 8 && box.w >= 1100 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h)
   const rowGap = ROW_GAP
   const amp = rows > 1 ? 1.3 : 1.5
   // The camera looks from (1,1,1): screen-right is (1,0,-1) and screen-down is (1,0,1).
@@ -1033,7 +1033,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                     : <Person key={r.id} p={pp} color={r.color} />
                 })}
                 {!platforms && process.steps.some((x) => x.stageId === s.id && x.kind === 'decision') && <CheckSign repeat={loops.some((l) => l.from === k && l.to === k)} />}
-                {!compact && s.systems[0] && (quiet ? hover === k : (!narrow || isActive)) && (focus === null || focus === k) && (() => {
+                {!compact && s.systems[0] && (quiet ? hover === k || isActive : (!narrow || isActive)) && (focus === null || focus === k) && (() => {
                   const sys = s.systems.map(sysLabel).filter(Boolean)
                   const unsure = s.systems.some(sysUnsure)
                   return (

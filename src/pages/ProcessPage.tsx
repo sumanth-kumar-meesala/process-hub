@@ -16,6 +16,7 @@ import { Terms } from '@/components/Terms'
 import { AskPanel } from '@/components/process/AskPanel'
 import { ResourceLink } from '@/components/process/ResourceLink'
 import { ViewSwitch } from '@/components/process/ViewSwitch'
+import { StageSidePanel } from '@/components/process/StageSidePanel'
 
 type View = 'overview' | 'role' | 'owner'
 
@@ -37,12 +38,14 @@ function ProcessView({ proc }: { proc: Process }) {
   const [hover, setHover] = useState<number | null>(null)
   const [view, setView] = useState<View>('overview')
   const [asking, setAsking] = useState(false)
+  // the stage clicked on the map, shown in the side panel
+  const [sel, setSel] = useState<number | null>(null)
   const [params] = useSearchParams()
   // the same "Show steps for" and saved progress as the step-by-step guide
   const run = useGuide(proc, library)
   const n = proc.stages.length
   const hasSteps = stepCount(proc) > 0
-  const guide = (stage: number) => nav(`/process/${proc.id}/timeline?stage=${stage}`)
+  const openStage = (k: number) => { setAsking(false); setSel(Math.max(0, Math.min(n - 1, k))) }
 
   // "One question to start" on the home page sends people here with ?as=<role>
   useEffect(() => {
@@ -52,7 +55,7 @@ function ProcessView({ proc }: { proc: Process }) {
   }, [params, proc.roles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAsking(false) }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setAsking(false); setSel(null) } }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
@@ -113,12 +116,19 @@ function ProcessView({ proc }: { proc: Process }) {
             <div className="relative z-[1] flex flex-col gap-2">
               <p className="m-0 text-[15px] font-semibold text-on-surface-variant">
                 {run.roleObj ? <>The stages the <b className="text-on-surface">{run.roleObj.name}</b> is part of are highlighted. </> : null}
-                {can3d ? 'Click a stage to see its steps in the Timeline.' : 'Choose a stage to see its steps in the Timeline.'}
+                {can3d ? 'Click a stage to see its steps.' : 'Choose a stage to see its steps.'}
               </p>
               {can3d ? (
-                <div className="relative -mx-2 h-[min(clamp(320px,34vw,480px),calc(100vh-330px))] min-h-[300px] max-sm:h-[420px]">
-                  <Islands3D process={proc} active={-1} quiet onSelect={(k) => guide(k)} hover={hover} onHover={setHover} roleFilter={run.role} />
-                  {asking && <AskPanel proc={proc} onClose={() => setAsking(false)} onShowStage={(k) => guide(k)} />}
+                <div className={cn('grid gap-4', (sel !== null || asking) && 'lg:grid-cols-[minmax(0,1fr)_400px]')}>
+                  <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
+                    <Islands3D process={proc} active={sel ?? -1} quiet onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} onBackground={() => setSel(null)} />
+                  </div>
+                  {sel !== null && !asking && (
+                    <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
+                      <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onClose={() => setSel(null)} onStage={openStage} />
+                    </div>
+                  )}
+                  {asking && <AskPanel proc={proc} docked onClose={() => setAsking(false)} onShowStage={openStage} />}
                 </div>
               ) : (
                 <>
@@ -127,7 +137,7 @@ function ProcessView({ proc }: { proc: Process }) {
                       const off = !!run.role && !stageRoles(proc, s).some((r) => r.id === run.role)
                       return (
                         <li key={s.id}>
-                          <button onClick={() => guide(k)} className={cn('flex w-full cursor-pointer items-center gap-3 rounded-2xl border-0 bg-white px-4 py-3.5 text-left', off && 'opacity-40')}>
+                          <button onClick={() => openStage(k)} className={cn('flex w-full cursor-pointer items-center gap-3 rounded-2xl border-0 bg-white px-4 py-3.5 text-left', off && 'opacity-40')}>
                             <span className="flex h-10 w-10 flex-none items-center justify-center rounded-full text-base font-extrabold text-white" style={{ background: s.color }}>{k + 1}</span>
                             <span className="flex min-w-0 flex-col"><b className="text-[16px]">{s.short || s.title}</b><span className="text-[13px] text-on-surface-variant">{stageRoles(proc, s).map((r) => r.name).join(' · ')}</span></span>
                           </button>
@@ -135,7 +145,8 @@ function ProcessView({ proc }: { proc: Process }) {
                       )
                     })}
                   </ol>
-                  {asking && <AskPanel proc={proc} docked onClose={() => setAsking(false)} onShowStage={(k) => guide(k)} />}
+                  {sel !== null && !asking && <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onClose={() => setSel(null)} onStage={openStage} />}
+                  {asking && <AskPanel proc={proc} docked onClose={() => setAsking(false)} onShowStage={openStage} />}
                 </>
               )}
             </div>
