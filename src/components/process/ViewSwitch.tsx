@@ -1,11 +1,14 @@
 import { NavLink } from 'react-router-dom'
-import { Box, ListTree } from 'lucide-react'
+import { Box, ListTree, PanelRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-/** The switch at the top of a process: the 3D map or the Timeline. Same place and look on both pages. */
-export function ViewSwitch({ procId, current }: { procId: string; current: '3d' | 'timeline' }) {
+export type ProcessViewId = '3d' | 'sidebar' | 'timeline'
+
+/** The switch at the top of a process: the 3D map (with its stage card), the 3D map with a slide-in sidebar, or the Timeline. */
+export function ViewSwitch({ procId, current }: { procId: string; current: ProcessViewId }) {
   const items = [
     { id: '3d', label: '3D map', to: `/process/${procId}`, icon: Box },
+    { id: 'sidebar', label: 'Sidebar', to: `/process/${procId}/sidebar`, icon: PanelRight },
     { id: 'timeline', label: 'Timeline', to: `/process/${procId}/timeline`, icon: ListTree },
   ] as const
   return (

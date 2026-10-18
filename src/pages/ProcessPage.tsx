@@ -14,17 +14,22 @@ import { ProcessChat } from '@/components/process/ProcessChat'
 import { ProcessHeader } from '@/components/process/ProcessHeader'
 import { StageSidePanel } from '@/components/process/StageSidePanel'
 
-export default function ProcessPage() {
+/** The 3D map. `view` "sidebar": the map fills the width and a stage's details slide in from the right when you click it. */
+export default function ProcessPage({ view = '3d' }: { view?: '3d' | 'sidebar' }) {
   const { id } = useParams()
   const proc = useData((s) => s.processes.find((p) => p.id === id))
   const hydrated = useData((s) => s.hydrated)
   if (!proc) return (
     <div><AppHeader /><p className="p-10 text-on-surface-variant">{hydrated ? 'That process could not be found.' : 'Loading…'} <Link to="/">Back to processes</Link></p></div>
   )
-  return <ProcessView proc={proc} />
+  return <ProcessView proc={proc} view={view} />
 }
 
-function ProcessView({ proc }: { proc: Process }) {
+function ProcessView({ proc, view }: { proc: Process; view: '3d' | 'sidebar' }) {
+  const sidebar = view === 'sidebar'
+  // Sidebar view: the details panel is closed until a stage is clicked
+  const [panelOpen, setPanelOpen] = useState(false)
+  const showPanel = !sidebar || panelOpen
   const { persona } = useSession()
   const library = useData((s) => s.library)
   const can3d = useMemo(hasWebGL, [])
@@ -44,14 +49,21 @@ function ProcessView({ proc }: { proc: Process }) {
   const n = proc.stages.length
   // choosing a stage opens its first step (the reader's own, if they have one there) — the same "where you are" as the Timeline
   const openStage = (k: number) => {
-    const kk = Math.max(0, Math.min(n - 1, k)); setSel(kk)
+    const kk = Math.max(0, Math.min(n - 1, k)); setSel(kk); setPanelOpen(true)
     const st = run.g.stages[kk]
     if (st && run.cur?.stageIdx !== kk) { const x = st.usual.find((y) => y.mine) ?? st.mine[0] ?? st.all[0]; if (x) run.select(x.st.id) }
   }
   // Done / Yes / No can move on to another stage: the panel follows
-  useEffect(() => { if (run.cur && !run.finished) setSel(run.cur.stageIdx) }, [run.cur?.st.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (run.cur && !run.finished && showPanel) setSel(run.cur.stageIdx) }, [run.cur?.st.id]) // eslint-disable-line react-hooks/exhaustive-deps
   // choosing someone in "Show steps for" moves the panel to their first stage
   useEffect(() => { setSel(firstFor(run.role)) }, [run.role]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Esc closes the sliding panel
+  useEffect(() => {
+    if (!sidebar) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPanelOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [sidebar])
 
   // "One question to start" on the home page sends people here with ?as=<role>
   useEffect(() => {
@@ -65,7 +77,7 @@ function ProcessView({ proc }: { proc: Process }) {
       <AppHeader>
         {canEdit(persona, proc) && <Button variant="outlined" size="sm" onClick={() => nav(`/builder/${proc.id}`)}><Pencil size={15} />Edit in Builder</Button>}
       </AppHeader>
-      <ProcessHeader proc={proc} run={run} current="3d" />
+      <ProcessHeader proc={proc} run={run} current={view} />
       <main className="mx-auto flex max-w-[1360px] flex-col gap-5 px-3 pb-4 pt-1 sm:px-6">
         {proc.draftNote && !proc.needsCompleting && (
           <div className="flex items-start gap-3 rounded-[18px] bg-[#FFF7E6] px-5 py-3 text-sm text-[#7A3A00]">
@@ -91,9 +103,9 @@ function ProcessView({ proc }: { proc: Process }) {
                 <p className="m-0 inline-flex items-center gap-2 text-[13px] font-semibold text-on-surface-variant">
                   <MousePointerClick size={14} aria-hidden />{run.roleObj ? <><b className="text-on-surface">{run.roleObj.name}</b>'s stages are highlighted · click a stage to see its steps</> : 'Click a stage to see its steps'} · drag to move the map
                 </p>
-                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
+                <div className={cn('grid gap-4', !sidebar && 'lg:grid-cols-[minmax(0,1fr)_400px]')}>
                   <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
-                    <Islands3D process={proc} active={sel} quiet zoomLevel={zoom} tilt={tilt} resetKey={resetKey} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
+                    <Islands3D process={proc} active={showPanel ? sel : -1} quiet zoomLevel={zoom} tilt={tilt} resetKey={resetKey} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} onBackground={sidebar ? () => setPanelOpen(false) : undefined} />
                     <div role="group" aria-label="Map view" className="glass absolute bottom-3 left-3 z-[40] flex items-center gap-0 rounded-full p-0.5">
                       <MapBtn label="Zoom out" disabled={zoom <= -3} onClick={() => setZoom((z) => z - 1)}><ZoomOut size={15} /></MapBtn>
                       <MapBtn label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom((z) => z + 1)}><ZoomIn size={15} /></MapBtn>
@@ -104,9 +116,11 @@ function ProcessView({ proc }: { proc: Process }) {
                       <MapBtn label="Reset the view" onClick={() => { setZoom(DEFAULT_ZOOM); setTilt(DEFAULT_TILT); setResetKey((k) => k + 1) }}><RotateCcw size={14} /></MapBtn>
                     </div>
                   </div>
-                  <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
-                    <StageSidePanel proc={proc} run={run} k={sel} onStage={openStage} />
-                  </div>
+                  {!sidebar && (
+                    <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
+                      <StageSidePanel proc={proc} run={run} k={sel} onStage={openStage} />
+                    </div>
+                  )}
                 </div>
                 </>
               ) : (
@@ -124,7 +138,7 @@ function ProcessView({ proc }: { proc: Process }) {
                       )
                     })}
                   </ol>
-                  <StageSidePanel proc={proc} run={run} k={sel} onStage={openStage} />
+                  {showPanel && !sidebar && <StageSidePanel proc={proc} run={run} k={sel} onStage={openStage} />}
                 </>
               )}
             </div>
@@ -133,6 +147,12 @@ function ProcessView({ proc }: { proc: Process }) {
 
       </main>
       <AboutProcess proc={proc} />
+      {/* Sidebar view: the stage's details slide in from the right; the map stays usable beside it */}
+      {sidebar && (
+        <div aria-hidden={!panelOpen} className={cn('fixed bottom-0 right-0 top-0 z-[70] w-[440px] max-w-full transition-transform duration-300 ease-out print:hidden', panelOpen ? 'translate-x-0 shadow-[-24px_0_60px_rgba(15,23,42,.18)]' : 'pointer-events-none translate-x-full')}>
+          <StageSidePanel proc={proc} run={run} k={sel} onStage={openStage} onClose={() => setPanelOpen(false)} flat />
+        </div>
+      )}
       <ProcessChat proc={proc} onShowStage={openStage} />
     </div>
   )

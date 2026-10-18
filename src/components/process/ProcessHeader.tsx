@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
-import { ViewSwitch } from '@/components/process/ViewSwitch'
+import { ViewSwitch, type ProcessViewId } from '@/components/process/ViewSwitch'
 import type { GuideRun } from '@/lib/guide'
 import type { Process } from '@/lib/types'
 
 /** The top of a process, the same on the 3D map and the Timeline: where it lives, its name, the view switch and "Show steps for". */
-export function ProcessHeader({ proc, run, current }: { proc: Process; run: GuideRun; current: '3d' | 'timeline' }) {
+export function ProcessHeader({ proc, run, current }: { proc: Process; run: GuideRun; current: ProcessViewId }) {
   const hasSteps = proc.steps.some((x) => x.kind === 'step' || x.kind === 'decision')
   return (
     <div className="mx-auto flex w-full max-w-[1360px] flex-wrap items-center gap-x-5 gap-y-3 px-3 pb-3 sm:px-6 print:hidden">

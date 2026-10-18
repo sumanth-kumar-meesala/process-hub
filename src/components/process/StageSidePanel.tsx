@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { Terms } from '@/components/Terms'
 import { FinishedCard, Progress, StageInfo, StepDetails, StepMark } from '@/components/process/ProcessDetails'
 import type { GuideRun, GuideStep } from '@/lib/guide'
@@ -9,12 +9,13 @@ import { cn } from '@/lib/utils'
  * The stage chosen on the 3D map. It shows the same stage and step details as the Timeline
  * (shared components), and the open step is the same "where you are" as in the Timeline.
  */
-export function StageSidePanel({ proc, run, k, onStage }: { proc: Process; run: GuideRun; k: number; onStage: (k: number) => void }) {
+export function StageSidePanel({ proc, run, k, onStage, onClose, flat = false }: { proc: Process; run: GuideRun; k: number; onStage: (k: number) => void; onClose?: () => void; flat?: boolean }) {
   const { all } = run.g.stages[k]
   const n = proc.stages.length
   return (
-    <aside aria-label={`Stage ${k + 1}: ${proc.stages[k].title}`} className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-outline-variant bg-white shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.16)] max-lg:h-auto">
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain max-lg:overflow-visible">
+    <aside aria-label={`Stage ${k + 1}: ${proc.stages[k].title}`} className={cn('relative flex h-full min-h-0 flex-col overflow-hidden bg-white', flat ? '' : 'rounded-[28px] border border-outline-variant shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.16)] max-lg:h-auto')}>
+      {onClose && <button onClick={onClose} aria-label="Close the stage details" title="Close (Esc)" className="absolute right-3.5 top-3.5 z-[2] flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-0 bg-white/85 hover:bg-white"><X size={17} /></button>}
+      <div className={cn('flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain', !flat && 'max-lg:overflow-visible')}>
         <StageInfo proc={proc} k={k} roleId={run.role} compact />
         <div className="flex flex-col gap-3 px-4 pb-4 pt-4">
           <Progress run={run} />
