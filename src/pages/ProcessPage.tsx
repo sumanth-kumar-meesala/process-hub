@@ -74,17 +74,20 @@ function ProcessView({ proc }: { proc: Process }) {
             <div className="relative z-[1] flex flex-col gap-2">
               {!can3d && <p className="m-0 text-sm font-semibold text-on-surface-variant">Choose a stage to see its steps.</p>}
               {can3d ? (
+                <>
+                {/* the hint sits above the map, never on top of an island */}
+                <p className="m-0 inline-flex items-center gap-2 text-[13px] font-semibold text-on-surface-variant">
+                  <MousePointerClick size={14} aria-hidden />{run.roleObj ? <><b className="text-on-surface">{run.roleObj.name}</b>'s stages are highlighted · click a stage to see its steps</> : 'Click a stage to see its steps'}
+                </p>
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
                   <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
                     <Islands3D process={proc} active={sel} quiet zoomLevel={0} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
-                    <span className="glass pointer-events-none absolute left-3 top-1 z-[40] inline-flex h-9 items-center gap-2 rounded-full px-3.5 text-[13px] font-bold text-on-surface-variant">
-                      <MousePointerClick size={14} aria-hidden />{run.roleObj ? `${run.roleObj.name}'s stages are highlighted · click one to see its steps` : 'Click a stage to see its steps'}
-                    </span>
                   </div>
                   <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
                     <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onStage={openStage} />
                   </div>
                 </div>
+                </>
               ) : (
                 <>
                   <ol className="m-0 grid list-none gap-2.5 p-0 sm:grid-cols-2 lg:grid-cols-3">
