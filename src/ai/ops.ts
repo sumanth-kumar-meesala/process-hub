@@ -1,6 +1,4 @@
 import { ROLE_COLORS, STAGE_COLORS, uid, type LibraryItem, type Process, type ResourceCategory, type StepKind } from '@/lib/types'
-
-/** Small, safe edit operations the AI may propose. Applied only after the user clicks Apply. */
 export type Op =
   | { op: 'clear_draft' }
   | { op: 'add_role'; name: string; kind?: 'person' | 'team' | 'agent' | 'system'; tools?: string[] }
