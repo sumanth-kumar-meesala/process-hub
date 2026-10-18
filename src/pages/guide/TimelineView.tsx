@@ -65,7 +65,7 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
             return (
               <li key={stage.id} className="relative flex flex-col">
                 <button onClick={() => setOpen((o) => ({ ...o, [k]: !o[k] }))} aria-expanded={isOpen}
-                  className={cn('relative flex min-h-[60px] w-full cursor-pointer items-center gap-3 rounded-2xl border-0 bg-transparent py-2 pl-0.5 pr-2 text-left hover:bg-surface-low', !mine.length && !needle && 'opacity-55')}>
+                  className={cn('relative flex min-h-[60px] w-full cursor-pointer items-center gap-3 rounded-2xl border-0 bg-transparent py-2 pl-0.5 pr-2 text-left hover:bg-surface-low', !mine.length && !needle && 'text-on-surface-variant')}>
                   {/* a stage: a square badge and "STAGE n" — steps (round markers, n.1, n.2…) sit indented under it */}
                   <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl text-base font-extrabold"
                     style={{ background: stageDone && !isCur ? '#16A34A' : stage.color, color: 'white', opacity: isCur || stageDone ? 1 : 0.85 }}>
@@ -112,11 +112,11 @@ function Row({ x, cur, done, hit, onPick }: { x: GuideStep; cur: boolean; done: 
   return (
     <li className="flex flex-col">
       <button id={`tl-${x.st.id}`} onClick={onPick} aria-current={cur ? 'step' : undefined}
-        className={cn('flex w-full cursor-pointer items-start gap-3 rounded-2xl border-0 py-2 pl-2 pr-2 text-left transition-colors', cur ? '' : 'bg-transparent hover:bg-surface-low', !x.mine && 'opacity-45')}
+        className={cn('flex w-full cursor-pointer items-start gap-3 rounded-2xl border-0 py-2 pl-2 pr-2 text-left transition-colors', cur ? '' : 'bg-transparent hover:bg-surface-low')}
         style={cur ? { background: tint(x.stage.color, 0.12) } : undefined}>
-        <span className="mt-px"><StepMark x={x} done={done} cur={cur} /></span>
+        <span className="mt-px"><StepMark x={x} done={done} cur={cur} muted={!x.mine} /></span>
         <span className="flex min-w-0 flex-col gap-0.5">
-          <span className={cn('text-[14.5px] leading-snug', cur ? 'font-extrabold' : 'font-semibold', hit && 'rounded bg-[#FEF3C7] px-0.5')}>{x.st.label}</span>
+          <span className={cn('text-[14.5px] leading-snug', cur ? 'font-extrabold' : x.mine ? 'font-semibold' : 'font-medium text-on-surface-variant', hit && 'rounded bg-[#FEF3C7] px-0.5')}>{x.st.label}</span>
           <span className="text-xs text-on-surface-variant">{agent && <Bot size={11} className="mr-0.5 inline align-[-1px]" aria-label="AI agent" />}{x.role?.name ?? '—'}{!x.onPath ? ' · only if a check says no' : ''}</span>
           {x.isCheck && x.no && <span className="flex items-center gap-1 text-xs font-semibold text-tertiary">If no → {x.noBack ? 'back to ' : ''}{x.no.label}{x.no.stageId !== x.st.stageId ? ' (another stage)' : ''}</span>}
           {x.thenBack && <span className="flex items-center gap-1 text-xs font-semibold text-tertiary"><Undo2 size={12} />Then back to {x.thenBack.label}</span>}

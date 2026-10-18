@@ -28,7 +28,7 @@ export function StageSidePanel({ proc, run, k, onStage, onClose, flat = false }:
               const open = !run.finished && run.cur?.st.id === x.st.id
               return (
                 // an open step: the title row is shaded like a heading, its details sit on white below it
-                <div key={x.st.id} className={cn('flex flex-col overflow-hidden rounded-2xl border transition-colors', open ? 'border-outline-variant' : 'border-transparent', !x.mine && !open && 'opacity-50')}>
+                <div key={x.st.id} className={cn('flex flex-col overflow-hidden rounded-2xl border transition-colors', open ? 'border-outline-variant' : 'border-transparent')}>
                   <Row x={x} open={open} done={run.done.has(x.st.id)} onClick={() => run.select(x.st.id)} />
                   {open && <div className="border-0 border-t border-solid border-outline-variant bg-white px-4 pb-4 pt-3"><StepDetails proc={proc} run={run} gs={x} compact /></div>}
                 </div>
@@ -53,9 +53,9 @@ export function StageSidePanel({ proc, run, k, onStage, onClose, flat = false }:
 function Row({ x, open, done, onClick }: { x: GuideStep; open: boolean; done: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick} aria-expanded={open} className={cn('flex w-full cursor-pointer items-start gap-3 border-0 px-2.5 py-2.5 text-left', open ? 'bg-surface-low' : 'rounded-2xl bg-transparent hover:bg-surface-low')}>
-      <span className="mt-px"><StepMark x={x} done={done} cur={open} /></span>
+      <span className="mt-px"><StepMark x={x} done={done} cur={open} muted={!x.mine} /></span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <b className="text-[15px] leading-snug"><Terms text={x.st.label} /></b>
+        <b className={cn('text-[15px] leading-snug', !x.mine && !open && 'font-semibold text-on-surface-variant')}><Terms text={x.st.label} /></b>
         <span className="text-xs text-on-surface-variant">{x.role?.name ?? '—'}{!x.onPath ? ' · only if a check says no' : ''}{x.docs.length ? ` · ${x.docs.length} doc${x.docs.length > 1 ? 's' : ''}` : ''}</span>
       </span>
       <ChevronDown size={16} className={cn('mt-1.5 flex-none text-on-surface-variant transition-transform', open && 'rotate-180')} />

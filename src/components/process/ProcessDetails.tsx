@@ -178,7 +178,14 @@ export function Progress({ run }: { run: GuideRun }) {
  * a round marker with its number inside the stage ("2.3"), a yellow diamond "?" for a check, a dashed "!" for a step
  * that only happens when a check says no, and a green tick once done. Stages use square badges instead.
  */
-export function StepMark({ x, done = false, cur = false, size = 26 }: { x: GuideStep; done?: boolean; cur?: boolean; size?: number }) {
+export function StepMark({ x, done = false, cur = false, size = 26, muted = false }: { x: GuideStep; done?: boolean; cur?: boolean; size?: number; muted?: boolean }) {
+  // someone else's step (when "Show steps for" picks a person): plain grey instead of the stage colour, but fully readable
+  if (muted && !done && !cur) return (
+    <span className={cn('relative z-[1] flex flex-none items-center justify-center font-extrabold leading-none text-on-surface-variant', x.isCheck ? 'rotate-45 rounded-[6px] bg-surface-mid' : 'rounded-full bg-surface-mid', !x.onPath && !x.isCheck && 'border-[1.5px] border-dashed border-outline')}
+      style={{ width: x.isCheck ? size * 0.8 : size, height: x.isCheck ? size * 0.8 : size, margin: x.isCheck ? size * 0.1 : 0, fontSize: size >= 40 ? 15 : size >= 30 ? 11.5 : 10 }}>
+      <span className={cn(x.isCheck && '-rotate-45')}>{x.isCheck ? '?' : x.local ?? '!'}</span>
+    </span>
+  )
   const fs = size >= 40 ? 15 : size >= 30 ? 11.5 : 10
   return (
     <span className={cn('relative z-[1] flex flex-none items-center justify-center font-extrabold leading-none', x.isCheck ? 'rotate-45 rounded-[6px]' : 'rounded-full', !x.onPath && !done && !x.isCheck && 'border-[1.5px] border-dashed border-tertiary')}
