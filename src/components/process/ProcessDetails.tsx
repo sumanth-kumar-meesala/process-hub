@@ -66,6 +66,21 @@ export function StepDetails({ proc, run, gs, compact = false }: { proc: Process;
   const h3 = compact ? 'm-0 text-sm font-extrabold' : 'm-0 text-base font-extrabold'
   return (
     <div className={cn('flex flex-col', compact ? 'gap-4 text-sm' : 'gap-5')}>
+      {compact ? (
+        // in the side card the step's marker and name are already on its row: just where it sits, who does it, and the link
+        <div className="flex items-start gap-2">
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[13px] text-on-surface-variant">
+            <b>{gs.isCheck ? `A check in stage ${gs.stageIdx + 1}` : gs.local ? `Step ${gs.local}` : 'Only needed when a check says no'}{gs.n ? ` · ${gs.n} of ${run.total}` : ''}</b>
+            <span aria-hidden>·</span>
+            {agent ? <><Bot size={13} aria-hidden />Done automatically by</> : 'Done by'} <b className="text-on-surface">{gs.role?.name ?? '—'}</b>
+            {agent && gs.role?.tools?.length ? <span>· using {gs.role.tools.join(', ')}</span> : null}
+          </span>
+          <button onClick={() => copy('step', stepUrl(gs.st.id))} title="Copy a link to this step" aria-label="Copy a link to this step"
+            className="inline-flex h-8 flex-none cursor-pointer items-center gap-1.5 rounded-full border border-outline-variant bg-white px-3 text-xs font-bold hover:bg-surface-low">
+            {copied === 'step' ? <><Check size={13} />Copied</> : <><Copy size={13} />Link</>}
+          </button>
+        </div>
+      ) : (
       <div className="flex items-start gap-3.5">
         <StepMark x={gs} cur size={compact ? 40 : 52} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -79,9 +94,10 @@ export function StepDetails({ proc, run, gs, compact = false }: { proc: Process;
         </div>
         <button onClick={() => copy('step', stepUrl(gs.st.id))} title="Copy a link to this step" aria-label="Copy a link to this step"
           className="inline-flex h-9 flex-none cursor-pointer items-center gap-1.5 rounded-full border border-outline-variant bg-white px-3 text-xs font-bold hover:bg-surface-low">
-          {copied === 'step' ? <><Check size={13} />Copied</> : <><Copy size={13} />{compact ? 'Link' : 'Copy link'}</>}
+          {copied === 'step' ? <><Check size={13} />Copied</> : <><Copy size={13} />Copy link</>}
         </button>
       </div>
+      )}
 
       {gs.st.why && <p className={cn('m-0 leading-relaxed text-on-surface-variant', !compact && 'text-[17px]')}><b className="text-on-surface">Why it matters:</b> {gs.st.why}</p>}
 

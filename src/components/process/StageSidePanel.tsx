@@ -26,9 +26,10 @@ export function StageSidePanel({ proc, run, k, onStage }: { proc: Process; run: 
             {all.map((x) => {
               const open = !run.finished && run.cur?.st.id === x.st.id
               return (
-                <div key={x.st.id} className={cn('flex flex-col rounded-2xl transition-colors', open ? 'bg-surface-low' : '', !x.mine && !open && 'opacity-50')}>
+                // an open step: the title row is shaded like a heading, its details sit on white below it
+                <div key={x.st.id} className={cn('flex flex-col overflow-hidden rounded-2xl border transition-colors', open ? 'border-outline-variant' : 'border-transparent', !x.mine && !open && 'opacity-50')}>
                   <Row x={x} open={open} done={run.done.has(x.st.id)} onClick={() => run.select(x.st.id)} />
-                  {open && <div className="px-3 pb-4 pt-1"><StepDetails proc={proc} run={run} gs={x} compact /></div>}
+                  {open && <div className="border-0 border-t border-solid border-outline-variant bg-white px-4 pb-4 pt-3"><StepDetails proc={proc} run={run} gs={x} compact /></div>}
                 </div>
               )
             })}
@@ -50,7 +51,7 @@ export function StageSidePanel({ proc, run, k, onStage }: { proc: Process; run: 
 /** A step in the list: the same marks as the Timeline (number, "?" for a check, ✓ when done, dashed for "only if no"). */
 function Row({ x, open, done, onClick }: { x: GuideStep; open: boolean; done: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} aria-expanded={open} className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border-0 bg-transparent px-2.5 py-2.5 text-left hover:bg-surface-low">
+    <button onClick={onClick} aria-expanded={open} className={cn('flex w-full cursor-pointer items-start gap-3 border-0 px-2.5 py-2.5 text-left', open ? 'bg-surface-low' : 'rounded-2xl bg-transparent hover:bg-surface-low')}>
       <span className="mt-px"><StepMark x={x} done={done} cur={open} /></span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <b className="text-[15px] leading-snug"><Terms text={x.st.label} /></b>
