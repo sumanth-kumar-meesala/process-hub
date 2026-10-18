@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '@/components/AppHeader'
 import { ProcessHeader } from '@/components/process/ProcessHeader'
+import { AboutProcess } from '@/components/process/AboutProcess'
 import TimelineView from '@/pages/guide/TimelineView'
 import { useGuide } from '@/lib/guide'
 import type { Process } from '@/lib/types'
@@ -38,16 +39,17 @@ function Guide({ proc }: { proc: Process }) {
   const work = proc.steps.filter((x) => x.kind === 'step' || x.kind === 'decision')
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex min-h-full flex-col">
       <AppHeader />
       <ProcessHeader proc={proc} run={run} current="timeline" />
-      <div className="min-h-0 flex-1">
+      <div className="h-[calc(100vh-150px)] min-h-[560px] max-[979px]:h-auto">
         {work.length === 0 ? (
           <p className="mx-auto max-w-[760px] p-10 text-on-surface-variant">This process doesn't have any steps yet — {proc.owner} is still completing it.</p>
         ) : (
           <TimelineView proc={proc} run={run} />
         )}
       </div>
+      <AboutProcess proc={proc} onShowStage={(k) => { const st = run.g.stages[k]; const x = st?.usual.find((y) => y.mine) ?? st?.all[0]; if (x) run.select(x.st.id) }} />
     </div>
   )
 }
