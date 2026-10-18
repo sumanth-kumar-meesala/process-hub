@@ -15,7 +15,7 @@ import { useGuide } from '@/lib/guide'
 import { Terms } from '@/components/Terms'
 import { AskPanel } from '@/components/process/AskPanel'
 import { ResourceLink } from '@/components/process/ResourceLink'
-import { ViewSwitch } from '@/components/process/ViewSwitch'
+import { ProcessHeader } from '@/components/process/ProcessHeader'
 import { StageSidePanel } from '@/components/process/StageSidePanel'
 
 type View = 'overview' | 'role' | 'owner'
@@ -68,6 +68,7 @@ function ProcessView({ proc }: { proc: Process }) {
       <AppHeader>
         {canEdit(persona, proc) && <Button variant="outlined" size="sm" onClick={() => nav(`/builder/${proc.id}`)}><Pencil size={15} />Edit in Builder</Button>}
       </AppHeader>
+      <ProcessHeader proc={proc} run={run} current="3d" />
       <main className="mx-auto flex max-w-[1360px] flex-col gap-7 px-3 pb-20 pt-1 sm:px-6">
         {proc.draftNote && !proc.needsCompleting && (
           <div className="flex items-start gap-3 rounded-[18px] bg-[#FFF7E6] px-5 py-3 text-sm text-[#7A3A00]">
@@ -82,36 +83,17 @@ function ProcessView({ proc }: { proc: Process }) {
 
         {/* ---------- the process at a glance ---------- */}
         <section className="dot-grid relative flex flex-col gap-4 overflow-clip rounded-[36px] p-4 sm:px-8 sm:py-7">
-          <div className="relative z-[1] flex flex-wrap items-start gap-x-6 gap-y-3">
-          <div className="flex min-w-[min(420px,100%)] flex-1 flex-col gap-1.5">
-            <nav aria-label="Breadcrumb" className="flex gap-1.5 text-[13px] font-semibold text-on-surface-variant"><Link to="/" className="no-underline">Processes</Link><span aria-hidden>/</span><span>{proc.area}</span></nav>
-            <div className="flex flex-wrap items-center gap-3">
-              {proc.code && <span className="inline-flex h-7 items-center rounded-[9px] bg-primary px-2.5 text-sm font-extrabold text-white">{proc.code}</span>}
-              <h1 className="m-0 text-[clamp(26px,3.2vw,38px)] font-extrabold leading-[1.1] tracking-[-0.02em]">{proc.title}</h1>
+          <div className="relative z-[1] flex flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="flex min-w-[min(420px,100%)] flex-1 flex-col gap-1.5">
+              <p className="m-0 max-w-[760px] text-[16px] leading-snug text-on-surface-variant"><Terms text={proc.summary} /></p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-on-surface-variant">
+                <Person label="Owner" name={proc.owner} bg="#DFE7FF" fg="#0A2472" />
+                {proc.executiveOwner && <Person label="Executive" name={proc.executiveOwner} bg="#D3F2DE" fg="#0B3D20" />}
+                {proc.reviewNext && <span>Next review <b className="text-on-surface">{proc.reviewNext}</b></span>}
+              </div>
             </div>
-            <p className="m-0 max-w-[760px] text-[16px] leading-snug text-on-surface-variant"><Terms text={proc.summary} /></p>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-on-surface-variant">
-              <Person label="Owner" name={proc.owner} bg="#DFE7FF" fg="#0A2472" />
-              {proc.executiveOwner && <Person label="Executive" name={proc.executiveOwner} bg="#D3F2DE" fg="#0B3D20" />}
-              {proc.reviewNext && <span>Next review <b className="text-on-surface">{proc.reviewNext}</b></span>}
-            </div>
+            {hasSteps && <Button variant="outlined" size="lg" className="print:hidden" onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={18} />Ask a question</Button>}
           </div>
-          {hasSteps && <ViewSwitch procId={proc.id} current="3d" />}
-          </div>
-
-          {hasSteps && (
-            <div className="relative z-[1] flex flex-wrap items-center gap-3 print:hidden">
-              <label className="flex h-14 items-center gap-2 rounded-full border border-outline-variant bg-white pl-5 pr-2 text-[15px] font-bold">
-                Show steps for
-                <select value={run.role ?? ''} onChange={(e) => run.setRole(e.target.value || null)}
-                  className="h-10 max-w-[220px] rounded-full border-0 bg-surface-low px-3 text-[15px] font-bold text-on-surface">
-                  <option value="">Everyone</option>
-                  {proc.roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
-              </label>
-              <Button variant="outlined" size="lg" className="h-14" onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={18} />Ask a question</Button>
-            </div>
-          )}
 
           {n === 0 ? (
             <p className="relative z-[1] m-0 rounded-[20px] bg-white p-6 text-sm text-on-surface-variant">The owner hasn't added stages yet.</p>
