@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AppHeader } from '@/components/AppHeader'
 import { ProcessHeader } from '@/components/process/ProcessHeader'
 import { AboutProcess } from '@/components/process/AboutProcess'
+import { ProcessChat } from '@/components/process/ProcessChat'
 import TimelineView from '@/pages/guide/TimelineView'
 import { useGuide } from '@/lib/guide'
 import type { Process } from '@/lib/types'
@@ -49,7 +50,8 @@ function Guide({ proc }: { proc: Process }) {
           <TimelineView proc={proc} run={run} />
         )}
       </div>
-      <AboutProcess proc={proc} onShowStage={(k) => { const st = run.g.stages[k]; const x = st?.usual.find((y) => y.mine) ?? st?.all[0]; if (x) run.select(x.st.id) }} />
+      <AboutProcess proc={proc} />
+      <ProcessChat proc={proc} onShowStage={(k) => { const st = run.g.stages[k]; const x = st?.usual.find((y) => y.mine) ?? st?.all[0]; if (x) run.select(x.st.id) }} />
     </div>
   )
 }

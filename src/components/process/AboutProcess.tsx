@@ -1,8 +1,5 @@
-import { useState } from 'react'
-import { Check, ChevronRight, Flag, MessageCircleQuestion, Undo2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Check, ChevronRight, Flag } from 'lucide-react'
 import { Terms } from '@/components/Terms'
-import { AskPanel } from '@/components/process/AskPanel'
 import { ResourceLink } from '@/components/process/ResourceLink'
 import { catOf } from '@/lib/resources'
 import type { LibraryItem, Process } from '@/lib/types'
@@ -12,16 +9,13 @@ const initials = (n: string) => n.split(' ').map((w) => w[0]).join('').slice(0, 
 
 /**
  * Under the 3D map and the Timeline (the same on both): only what the steps don't already show —
- * what it's for and who owns it, what starts and ends it, what to do when things go wrong,
- * the rules behind it and related processes, and a place to ask a question.
+ * what it's for and who owns it, what starts and ends it, the rules behind it and related processes.
  */
-export function AboutProcess({ proc, onShowStage }: { proc: Process; onShowStage?: (k: number) => void }) {
+export function AboutProcess({ proc }: { proc: Process }) {
   const library = useData((s) => s.library)
-  const [asking, setAsking] = useState(false)
   const linked = (proc.linkedIds ?? []).map((id) => library.find((x) => x.id === id)).filter(Boolean) as LibraryItem[]
   const policies = linked.filter((x) => x.category === 'policy')
   const related = linked.filter((x) => x.category !== 'policy')
-  const cases = proc.exceptions ?? []
 
   return (
     <section aria-label="About this process" className="mx-auto flex w-full max-w-[1360px] flex-col gap-4 px-3 pb-16 pt-2 sm:px-6 print:hidden">
@@ -37,11 +31,7 @@ export function AboutProcess({ proc, onShowStage }: { proc: Process; onShowStage
             {proc.reviewLast && <span>Last reviewed <b className="text-on-surface">{proc.reviewLast}</b></span>}
             {proc.reviewNext && <span>Next review <b className="text-on-surface">{proc.reviewNext}</b></span>}
           </div>
-          <div className="flex flex-wrap items-center gap-3 border-t border-outline-variant pt-4">
-            <Button variant={asking ? 'dark' : 'outlined'} onClick={() => setAsking((x) => !x)} aria-pressed={asking}><MessageCircleQuestion size={17} />Ask a question</Button>
-            <span className="text-sm text-on-surface-variant">Something not right? Tell {proc.owner}.</span>
-          </div>
-          {asking && <AskPanel proc={proc} docked onClose={() => setAsking(false)} onShowStage={(k) => { onShowStage?.(k); window.scrollTo({ top: 0, behavior: 'smooth' }) }} />}
+          <p className="m-0 border-t border-outline-variant pt-4 text-sm text-on-surface-variant">Something not right? Tell {proc.owner}. Questions? Ask the assistant, bottom right.</p>
         </div>
 
         {/* what starts it and what "done" means */}
@@ -60,20 +50,6 @@ export function AboutProcess({ proc, onShowStage }: { proc: Process; onShowStage
           </div>
         </div>
       </div>
-
-      {cases.length > 0 && (
-        <div className="flex flex-col gap-3 rounded-[28px] bg-white p-6">
-          <h2 className="m-0 flex flex-wrap items-baseline gap-x-3 text-xl font-extrabold"><span className="inline-flex items-center gap-2"><Undo2 size={20} className="text-tertiary" aria-hidden />What if…?</span><span className="text-sm font-semibold text-on-surface-variant">When things don't go to plan</span></h2>
-          <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-            {cases.map((x, k) => (
-              <div key={k} className="flex flex-col gap-1 rounded-2xl bg-[#FFF7E6] px-4 py-3 text-sm">
-                <b><Terms text={x.case} /></b>
-                {x.handled && <span className="text-[13px] text-[#7A3A00]">→ <Terms text={x.handled} /></span>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {(policies.length > 0 || related.length > 0) && (
         <div className="grid gap-4 md:grid-cols-2">

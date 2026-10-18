@@ -10,6 +10,7 @@ import type { Process } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { useGuide } from '@/lib/guide'
 import { AboutProcess } from '@/components/process/AboutProcess'
+import { ProcessChat } from '@/components/process/ProcessChat'
 import { ProcessHeader } from '@/components/process/ProcessHeader'
 import { StageSidePanel } from '@/components/process/StageSidePanel'
 
@@ -107,7 +108,8 @@ function ProcessView({ proc }: { proc: Process }) {
         </section>
 
       </main>
-      <AboutProcess proc={proc} onShowStage={openStage} />
+      <AboutProcess proc={proc} />
+      <ProcessChat proc={proc} onShowStage={openStage} />
     </div>
   )
 }
