@@ -19,6 +19,8 @@ createRoot(document.getElementById('root')!).render(
         <Routes>
           <Route path="/" element={<Discover />} />
           <Route path="/process/:id" element={<ProcessPage />} />
+          <Route path="/process/:id/timeline" element={<GuidePage />} />
+          {/* older links to the guided pages open the Timeline */}
           <Route path="/process/:id/guide" element={<GuidePage />} />
           <Route path="/process/:id/guide/:view" element={<GuidePage />} />
           <Route path="/builder" element={<Builder />} />

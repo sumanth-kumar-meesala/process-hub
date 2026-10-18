@@ -7,7 +7,10 @@ import { roleKind, sysLabel } from '@/lib/derive'
 import type { GuideStep } from '@/lib/guide'
 import { tint } from '@/lib/types'
 import { cn } from '@/lib/utils'
-import type { GuideViewProps } from './views'
+import type { GuideRun } from '@/lib/guide'
+import type { Process } from '@/lib/types'
+
+export interface GuideViewProps { proc: Process; run: GuideRun }
 
 /** Timeline: every stage and step down the left (open a stage to see its steps), the chosen step on the right. */
 export default function TimelineView({ proc, run }: GuideViewProps) {

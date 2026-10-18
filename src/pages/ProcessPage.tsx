@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, Check, ChevronRight, FileText, Flag, Pencil, Trophy, Users, Monitor, ShieldCheck, Share2, HeartHandshake, Undo2, MessageCircleQuestion, ListChecks } from 'lucide-react'
+import { ArrowRight, Check, ChevronRight, FileText, Flag, Pencil, Trophy, Users, Monitor, ShieldCheck, Share2, HeartHandshake, Undo2, MessageCircleQuestion } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { Card, Tag } from '@/components/ui/card'
@@ -15,6 +15,7 @@ import { useGuide } from '@/lib/guide'
 import { Terms } from '@/components/Terms'
 import { AskPanel } from '@/components/process/AskPanel'
 import { ResourceLink } from '@/components/process/ResourceLink'
+import { ViewSwitch } from '@/components/process/ViewSwitch'
 
 type View = 'overview' | 'role' | 'owner'
 
@@ -41,8 +42,7 @@ function ProcessView({ proc }: { proc: Process }) {
   const run = useGuide(proc, library)
   const n = proc.stages.length
   const hasSteps = stepCount(proc) > 0
-  const guide = (stage?: number) => nav(`/process/${proc.id}/guide${stage === undefined ? '' : `/timeline?stage=${stage}`}`)
-  const started = run.done.size > 0 || run.finished
+  const guide = (stage: number) => nav(`/process/${proc.id}/timeline?stage=${stage}`)
 
   // "One question to start" on the home page sends people here with ?as=<role>
   useEffect(() => {
@@ -76,7 +76,8 @@ function ProcessView({ proc }: { proc: Process }) {
 
         {/* ---------- the process at a glance ---------- */}
         <section className="dot-grid relative flex flex-col gap-4 overflow-clip rounded-[36px] p-4 sm:px-8 sm:py-7">
-          <div className="relative z-[1] flex flex-col gap-1.5">
+          <div className="relative z-[1] flex flex-wrap items-start gap-x-6 gap-y-3">
+          <div className="flex min-w-[min(420px,100%)] flex-1 flex-col gap-1.5">
             <nav aria-label="Breadcrumb" className="flex gap-1.5 text-[13px] font-semibold text-on-surface-variant"><Link to="/" className="no-underline">Processes</Link><span aria-hidden>/</span><span>{proc.area}</span></nav>
             <div className="flex flex-wrap items-center gap-3">
               {proc.code && <span className="inline-flex h-7 items-center rounded-[9px] bg-primary px-2.5 text-sm font-extrabold text-white">{proc.code}</span>}
@@ -89,12 +90,11 @@ function ProcessView({ proc }: { proc: Process }) {
               {proc.reviewNext && <span>Next review <b className="text-on-surface">{proc.reviewNext}</b></span>}
             </div>
           </div>
+          {hasSteps && <ViewSwitch procId={proc.id} current="3d" />}
+          </div>
 
           {hasSteps && (
             <div className="relative z-[1] flex flex-wrap items-center gap-3 print:hidden">
-              <Button size="lg" className="h-14 px-7 text-[17px]" onClick={() => guide()}>
-                <ListChecks size={20} />{started && !run.finished ? `Continue the step-by-step guide (${run.doneCount} of ${run.total})` : 'Start the step-by-step guide'}
-              </Button>
               <label className="flex h-14 items-center gap-2 rounded-full border border-outline-variant bg-white pl-5 pr-2 text-[15px] font-bold">
                 Show steps for
                 <select value={run.role ?? ''} onChange={(e) => run.setRole(e.target.value || null)}
@@ -113,7 +113,7 @@ function ProcessView({ proc }: { proc: Process }) {
             <div className="relative z-[1] flex flex-col gap-2">
               <p className="m-0 text-[15px] font-semibold text-on-surface-variant">
                 {run.roleObj ? <>The stages the <b className="text-on-surface">{run.roleObj.name}</b> is part of are highlighted. </> : null}
-                {can3d ? 'Click a stage to see its steps.' : 'Choose a stage to see its steps.'}
+                {can3d ? 'Click a stage to see its steps in the Timeline.' : 'Choose a stage to see its steps in the Timeline.'}
               </p>
               {can3d ? (
                 <div className="relative -mx-2 h-[min(clamp(320px,34vw,480px),calc(100vh-330px))] min-h-[300px] max-sm:h-[420px]">
