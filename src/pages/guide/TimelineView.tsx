@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Bot, Check, ChevronDown, Flag, Search, Undo2, X } from 'lucide-react'
-import { FinishedCard, Progress, StageInfo, StepDetails } from '@/components/process/ProcessDetails'
+import { FinishedCard, Progress, StageInfo, StepDetails, StepMark } from '@/components/process/ProcessDetails'
 import { roleKind } from '@/lib/derive'
 import type { GuideStep } from '@/lib/guide'
 import { tint } from '@/lib/types'
@@ -53,8 +53,7 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
             className="h-8 cursor-pointer rounded-full border border-outline-variant bg-white px-3 text-xs font-bold hover:bg-surface-low">{allOpen ? 'Close all' : 'Open all'}</button>
         </div>
 
-        <ol className="relative m-0 flex list-none flex-col p-0">
-          <span aria-hidden className="absolute bottom-5 left-[17px] top-5 w-[2px] rounded bg-outline-variant" />
+        <ol className="m-0 flex list-none flex-col gap-1 p-0">
           {g.stages.map(({ stage, k, all, usual, mine }) => {
             const shown = needle ? all.filter(hit) : all
             if (needle && !shown.length) return null
@@ -67,11 +66,13 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
               <li key={stage.id} className="relative flex flex-col">
                 <button onClick={() => setOpen((o) => ({ ...o, [k]: !o[k] }))} aria-expanded={isOpen}
                   className={cn('relative flex min-h-[60px] w-full cursor-pointer items-center gap-3 rounded-2xl border-0 bg-transparent py-2 pl-0.5 pr-2 text-left hover:bg-surface-low', !mine.length && !needle && 'opacity-55')}>
-                  <span className="relative z-[1] flex h-8 w-8 flex-none items-center justify-center rounded-full text-sm font-extrabold ring-4 ring-white"
-                    style={{ background: stageDone && !isCur ? '#16A34A' : isCur ? stage.color : 'white', color: stageDone || isCur ? 'white' : stage.color, boxShadow: `inset 0 0 0 2px ${stageDone && !isCur ? '#16A34A' : stage.color}` }}>
-                    {stageDone && !isCur ? <Check size={16} strokeWidth={3} /> : k + 1}
+                  {/* a stage: a square badge and "STAGE n" — steps (round markers, n.1, n.2…) sit indented under it */}
+                  <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl text-base font-extrabold"
+                    style={{ background: stageDone && !isCur ? '#16A34A' : stage.color, color: 'white', opacity: isCur || stageDone ? 1 : 0.85 }}>
+                    {stageDone && !isCur ? <Check size={18} strokeWidth={3} /> : k + 1}
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="text-[10.5px] font-extrabold uppercase tracking-[.08em]" style={{ color: stage.color }}>Stage {k + 1}</span>
                     <b className="text-[15px] leading-snug">{stage.short || stage.title}</b>
                     <span className="text-xs text-on-surface-variant">
                       {needle ? `${shown.length} match${shown.length === 1 ? '' : 'es'}` : !mine.length ? 'Not your part' : `${mine.length} ${run.role ? 'of your steps' : 'steps'}${doneHere ? ` · ${doneHere} done` : ''}${isCur ? ' · you are here' : ''}`}
@@ -80,7 +81,7 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
                   <ChevronDown size={16} className={cn('flex-none text-on-surface-variant transition-transform', isOpen && 'rotate-180')} />
                 </button>
                 {isOpen && (
-                  <ol className="m-0 mb-2 flex list-none flex-col gap-0.5 p-0">
+                  <ol className="m-0 mb-2 ml-[19px] flex list-none flex-col gap-0.5 border-0 border-l-2 border-solid py-1 pl-3" style={{ borderColor: tint(stage.color, 0.45) }}>
                     {shown.map((x) => <Row key={x.st.id} x={x} cur={!run.finished && cur?.st.id === x.st.id} done={run.done.has(x.st.id)} hit={hit(x)} onPick={() => run.select(x.st.id)} />)}
                   </ol>
                 )}
@@ -111,12 +112,9 @@ function Row({ x, cur, done, hit, onPick }: { x: GuideStep; cur: boolean; done: 
   return (
     <li className="flex flex-col">
       <button id={`tl-${x.st.id}`} onClick={onPick} aria-current={cur ? 'step' : undefined}
-        className={cn('flex w-full cursor-pointer items-start gap-3 rounded-2xl border-0 py-2 pl-[7px] pr-2 text-left transition-colors', cur ? '' : 'bg-transparent hover:bg-surface-low', !x.mine && 'opacity-45')}
+        className={cn('flex w-full cursor-pointer items-start gap-3 rounded-2xl border-0 py-2 pl-2 pr-2 text-left transition-colors', cur ? '' : 'bg-transparent hover:bg-surface-low', !x.mine && 'opacity-45')}
         style={cur ? { background: tint(x.stage.color, 0.12) } : undefined}>
-        <span className={cn('relative z-[1] mt-0.5 flex h-[22px] w-[22px] flex-none items-center justify-center text-[11px] font-extrabold ring-[3px] ring-white', x.isCheck ? 'rotate-45 rounded-[5px]' : 'rounded-full', !x.onPath && !done && !cur && 'border-[1.5px] border-dashed border-tertiary')}
-          style={{ background: done ? '#16A34A' : x.isCheck ? '#FDE68A' : cur ? x.stage.color : x.onPath ? 'var(--color-surface-mid)' : 'white', color: done || (cur && !x.isCheck) ? 'white' : x.isCheck ? '#92400E' : 'var(--color-on-surface)' }}>
-          <span className={cn(x.isCheck && '-rotate-45')}>{done ? <Check size={12} strokeWidth={3} /> : x.isCheck ? '?' : x.n ?? '!'}</span>
-        </span>
+        <span className="mt-px"><StepMark x={x} done={done} cur={cur} /></span>
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className={cn('text-[14.5px] leading-snug', cur ? 'font-extrabold' : 'font-semibold', hit && 'rounded bg-[#FEF3C7] px-0.5')}>{x.st.label}</span>
           <span className="text-xs text-on-surface-variant">{agent && <Bot size={11} className="mr-0.5 inline align-[-1px]" aria-label="AI agent" />}{x.role?.name ?? '—'}{!x.onPath ? ' · only if a check says no' : ''}</span>
@@ -125,7 +123,7 @@ function Row({ x, cur, done, hit, onPick }: { x: GuideStep; cur: boolean; done: 
         </span>
       </button>
       {x.handTo && x.mine && (
-        <span className="ml-10 flex items-center gap-1.5 pb-1.5 text-xs font-bold text-on-surface-variant">
+        <span className="ml-[46px] flex items-center gap-1.5 pb-1.5 text-xs font-bold text-on-surface-variant">
           <span className="h-[7px] w-[7px] rounded-full" style={{ background: x.handTo.color }} />→ {x.handTo.name} takes over
         </span>
       )}

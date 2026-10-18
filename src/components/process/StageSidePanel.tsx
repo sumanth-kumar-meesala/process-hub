@@ -1,6 +1,6 @@
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Terms } from '@/components/Terms'
-import { FinishedCard, Progress, StageInfo, StepDetails } from '@/components/process/ProcessDetails'
+import { FinishedCard, Progress, StageInfo, StepDetails, StepMark } from '@/components/process/ProcessDetails'
 import type { GuideRun, GuideStep } from '@/lib/guide'
 import type { Process } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -51,11 +51,7 @@ export function StageSidePanel({ proc, run, k, onStage }: { proc: Process; run: 
 function Row({ x, open, done, onClick }: { x: GuideStep; open: boolean; done: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick} aria-expanded={open} className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border-0 bg-transparent px-2.5 py-2.5 text-left hover:bg-surface-low">
-      <span className={cn('mt-0.5 flex h-7 w-7 flex-none items-center justify-center text-[12px] font-extrabold', x.isCheck ? 'rotate-45 rounded-[6px]' : 'rounded-full',
-        done ? 'bg-[#16A34A] text-white' : x.isCheck ? 'bg-[#FDE68A] text-[#92400E]' : x.onPath ? 'text-white' : 'border-[1.5px] border-dashed border-tertiary bg-white text-tertiary')}
-        style={!done && !x.isCheck && x.onPath ? { background: x.stage.color } : undefined}>
-        <span className={cn(x.isCheck && '-rotate-45')}>{done ? '✓' : x.isCheck ? '?' : x.n ?? '!'}</span>
-      </span>
+      <span className="mt-px"><StepMark x={x} done={done} cur={open} /></span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <b className="text-[15px] leading-snug"><Terms text={x.st.label} /></b>
         <span className="text-xs text-on-surface-variant">{x.role?.name ?? '—'}{!x.onPath ? ' · only if a check says no' : ''}{x.docs.length ? ` · ${x.docs.length} doc${x.docs.length > 1 ? 's' : ''}` : ''}</span>

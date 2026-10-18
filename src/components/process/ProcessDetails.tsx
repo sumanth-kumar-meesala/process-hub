@@ -67,10 +67,9 @@ export function StepDetails({ proc, run, gs, compact = false }: { proc: Process;
   return (
     <div className={cn('flex flex-col', compact ? 'gap-4 text-sm' : 'gap-5')}>
       <div className="flex items-start gap-3.5">
-        <span className={cn('flex flex-none items-center justify-center font-extrabold text-white', compact ? 'h-10 w-10 text-base' : 'h-14 w-14 text-2xl', gs.isCheck ? 'rounded-2xl' : 'rounded-full')}
-          style={{ background: gs.isCheck ? '#C2410C' : gs.stage.color }}>{gs.isCheck ? '?' : gs.n ?? '!'}</span>
+        <StepMark x={gs} cur size={compact ? 40 : 52} />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <span className="text-[13px] font-bold text-on-surface-variant">{gs.n ? `${run.role ? 'Your step' : 'Step'} ${gs.n} of ${run.total}` : 'Only needed when a check says no'}{gs.isCheck ? ' · a check' : ''}</span>
+          <span className="text-[13px] font-bold text-on-surface-variant">{gs.isCheck ? `A check in stage ${gs.stageIdx + 1}` : gs.local ? `Step ${gs.local}` : `Stage ${gs.stageIdx + 1} · only needed when a check says no`}{gs.n ? ` · ${gs.n} of ${run.total}${run.role ? ' of your steps' : ''}` : ''}</span>
           <h2 className={cn('m-0 font-extrabold leading-tight tracking-[-0.01em]', compact ? 'text-lg' : 'text-[clamp(24px,2.4vw,32px)]')}><Terms text={gs.st.label} /></h2>
           <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[14px]">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: gs.role?.color }} />
@@ -155,5 +154,22 @@ export function Progress({ run }: { run: GuideRun }) {
       </div>
       <div className="h-2 rounded-full bg-surface-mid"><div className="h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${run.finished ? 100 : run.pct}%` }} /></div>
     </div>
+  )
+}
+
+/**
+ * How a step is marked everywhere (Timeline list, 3D side card, step details), so steps never look like stages:
+ * a round marker with its number inside the stage ("2.3"), a yellow diamond "?" for a check, a dashed "!" for a step
+ * that only happens when a check says no, and a green tick once done. Stages use square badges instead.
+ */
+export function StepMark({ x, done = false, cur = false, size = 26 }: { x: GuideStep; done?: boolean; cur?: boolean; size?: number }) {
+  const fs = size >= 40 ? 15 : size >= 30 ? 11.5 : 10
+  return (
+    <span className={cn('relative z-[1] flex flex-none items-center justify-center font-extrabold leading-none', x.isCheck ? 'rotate-45 rounded-[6px]' : 'rounded-full', !x.onPath && !done && !x.isCheck && 'border-[1.5px] border-dashed border-tertiary')}
+      style={{ width: x.isCheck ? size * 0.8 : size, height: x.isCheck ? size * 0.8 : size, margin: x.isCheck ? size * 0.1 : 0, fontSize: fs,
+        background: done ? '#16A34A' : x.isCheck ? '#FDE68A' : !x.onPath ? 'white' : cur ? x.stage.color : tint(x.stage.color, 0.16),
+        color: done || (cur && !x.isCheck && x.onPath) ? 'white' : x.isCheck ? '#92400E' : !x.onPath ? 'var(--color-tertiary)' : x.stage.color }}>
+      <span className={cn(x.isCheck && '-rotate-45')}>{done ? <Check size={Math.round(size * 0.5)} strokeWidth={3} /> : x.isCheck ? '?' : x.local ?? '!'}</span>
+    </span>
   )
 }

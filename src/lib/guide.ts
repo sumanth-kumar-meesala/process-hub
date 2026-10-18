@@ -19,6 +19,8 @@ export interface GuideStep {
   onPath: boolean
   /** number in the usual order, counting only the chosen role's steps; null for "only if No" steps */
   n: number | null
+  /** the step's number inside its stage, e.g. "2.3" (only for normal steps on the usual path; checks show "?") */
+  local: string | null
   yes?: Step
   no?: Step
   /** "No" sends the work back to an earlier step */
@@ -56,10 +58,12 @@ export function buildGuide(p: Process, lib: LibraryItem[], roleId: string | null
     const docs = stepResources(st, lib).map((it) => ({ it, must: must.has(it.id) })).sort((a, b) => Number(b.must) - Number(a.must))
     const i = usualMine.findIndex((x) => x.id === st.id)
     return {
-      st, stage: p.stages[stageIdx], stageIdx, role: roleOf(st), isCheck, onPath: usualIds.has(st.id), n: i >= 0 ? i + 1 : null,
+      st, stage: p.stages[stageIdx], stageIdx, role: roleOf(st), isCheck, onPath: usualIds.has(st.id), n: i >= 0 ? i + 1 : null, local: null,
       yes, no, noBack: !!no && order(no.id) < order(st.id), thenBack, handTo, docs, mine: mine(st),
     }
   })
+  // number each stage's normal steps on the usual path 1, 2, 3… within the stage, shown as "stage.step"
+  p.stages.forEach((_, k) => { let c = 0; steps.forEach((g) => { if (g.stageIdx === k && g.onPath && !g.isCheck) g.local = `${k + 1}.${++c}` }) })
   const get = (id?: string) => steps.find((g) => g.st.id === id)
   const stages = p.stages.map((stage, k) => {
     const all = steps.filter((g) => g.stageIdx === k)
