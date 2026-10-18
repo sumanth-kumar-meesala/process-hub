@@ -62,17 +62,19 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
             const mineUsual = usual.filter((x) => x.mine)
             const doneHere = mineUsual.filter((x) => run.done.has(x.st.id)).length
             const stageDone = run.finished || (mineUsual.length > 0 && doneHere === mineUsual.length)
+            // a stage with none of the chosen person's steps: its colour drops to a 10% tint so it reads as "not yours"
+            const notMine = !!run.role && !mine.length
             return (
               <li key={stage.id} className="relative flex flex-col">
                 <button onClick={() => setOpen((o) => ({ ...o, [k]: !o[k] }))} aria-expanded={isOpen}
                   className={cn('relative flex min-h-[60px] w-full cursor-pointer items-center gap-3 rounded-2xl border-0 bg-transparent py-2 pl-0.5 pr-2 text-left hover:bg-surface-low', !mine.length && !needle && 'text-on-surface-variant')}>
                   {/* a stage: a square badge and "STAGE n" — steps (round markers, n.1, n.2…) sit indented under it */}
                   <span className="flex h-10 w-10 flex-none items-center justify-center rounded-xl text-base font-extrabold"
-                    style={{ background: stageDone && !isCur ? '#16A34A' : stage.color, color: 'white', opacity: isCur || stageDone ? 1 : 0.85 }}>
+                    style={notMine ? { background: tint(stage.color, 0.1), color: stage.color } : { background: stageDone && !isCur ? '#16A34A' : stage.color, color: 'white', opacity: isCur || stageDone ? 1 : 0.85 }}>
                     {stageDone && !isCur ? <Check size={18} strokeWidth={3} /> : k + 1}
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="text-[10.5px] font-extrabold uppercase tracking-[.08em]" style={{ color: stage.color }}>Stage {k + 1}</span>
+                    <span className="text-[10.5px] font-extrabold uppercase tracking-[.08em]" style={{ color: notMine ? tint(stage.color, 0.55) : stage.color }}>Stage {k + 1}</span>
                     <b className="text-[15px] leading-snug">{stage.short || stage.title}</b>
                     <span className="text-xs text-on-surface-variant">
                       {needle ? `${shown.length} match${shown.length === 1 ? '' : 'es'}` : !mine.length ? 'Not your part' : `${mine.length} ${run.role ? 'of your steps' : 'steps'}${doneHere ? ` · ${doneHere} done` : ''}${isCur ? ' · you are here' : ''}`}
@@ -81,7 +83,7 @@ export default function TimelineView({ proc, run }: GuideViewProps) {
                   <ChevronDown size={16} className={cn('flex-none text-on-surface-variant transition-transform', isOpen && 'rotate-180')} />
                 </button>
                 {isOpen && (
-                  <ol className="m-0 mb-2 ml-[19px] flex list-none flex-col gap-0.5 border-0 border-l-2 border-solid py-1 pl-3" style={{ borderColor: tint(stage.color, 0.45) }}>
+                  <ol className="m-0 mb-2 ml-[19px] flex list-none flex-col gap-0.5 border-0 border-l-2 border-solid py-1 pl-3" style={{ borderColor: tint(stage.color, notMine ? 0.12 : 0.45) }}>
                     {shown.map((x) => <Row key={x.st.id} x={x} cur={!run.finished && cur?.st.id === x.st.id} done={run.done.has(x.st.id)} hit={hit(x)} onPick={() => run.select(x.st.id)} />)}
                   </ol>
                 )}
