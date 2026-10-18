@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowRight, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, Flag, Minus, MousePointerClick, Pencil, Play, Plus, Trophy, Users, X, Monitor, ShieldCheck, Share2, HeartHandshake, Bot, Plug, Undo2, Footprints, MessageCircleQuestion, UserRound, ChevronDown, Box, List, Printer } from 'lucide-react'
+import { ArrowRight, ArrowUpRight, Check, ChevronLeft, ChevronRight, FileText, Flag, Minus, MousePointerClick, Pencil, Play, Plus, Trophy, Users, X, Monitor, ShieldCheck, Share2, HeartHandshake, Bot, Plug, Undo2, Footprints, MessageCircleQuestion, UserRound, ChevronDown, Box, List, ListChecks, Printer } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { Card, Tag } from '@/components/ui/card'
@@ -101,6 +101,7 @@ function ProcessView({ proc }: { proc: Process }) {
   return (
     <div className="min-h-full">
       <AppHeader>
+        {n > 0 && <Button size="sm" onClick={() => nav(`/process/${proc.id}/guide`)}><ListChecks size={15} />Step-by-step guide</Button>}
         {canEdit(persona, proc) && <Button variant="outlined" size="sm" onClick={() => nav(`/builder/${proc.id}`)}><Pencil size={15} />Edit in Builder</Button>}
       </AppHeader>
       <main className="mx-auto flex max-w-[1360px] flex-col gap-7 px-3 pb-20 pt-1 sm:px-6">
