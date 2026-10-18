@@ -855,7 +855,7 @@ function Avatar({ target, label }: { target: V3; label: string }) {
 
 /** Fits the island chain to the canvas, or glides in on one island when `focus` is set.
  *  Narrow screens follow the current stage. +/- buttons outside change `level`. */
-function CameraRig({ span, spanH = 11.5, level, center, focus, narrow, tilt = 0 }: { span: number; spanH?: number; level: number; center: V3; focus: V3 | null; narrow: boolean; tilt?: number }) {
+function CameraRig({ span, spanH = 11.5, level, center, focus, narrow, tilt = 0, resetKey = 0 }: { span: number; spanH?: number; level: number; center: V3; focus: V3 | null; narrow: boolean; tilt?: number; resetKey?: number }) {
   const { camera, size, controls } = useThree()
   const goal = useRef({ zoom: 40, t: new THREE.Vector3(), moving: true })
   // where the camera sits relative to what it looks at: the usual corner view, tilted up (more from above) or down
@@ -865,6 +865,12 @@ function CameraRig({ span, spanH = 11.5, level, center, focus, narrow, tilt = 0 
     return new THREE.Vector3(r * Math.sin(polar) * Math.SQRT1_2, r * Math.cos(polar), r * Math.sin(polar) * Math.SQRT1_2)
   }, [tilt])
   useEffect(() => { goal.current.moving = true }, [offGoal])
+  // "Reset view": ease back from wherever the mouse left the camera
+  useEffect(() => {
+    if (!resetKey) return
+    const c = controls as unknown as { target?: THREE.Vector3 } | null
+    off.current.copy(camera.position).sub(c?.target ?? new THREE.Vector3())
+  }, [resetKey]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const fitAll = Math.min(size.width / (span * 1.04), size.height / spanH)
     const zoomIn = Math.min(size.width / 8.5, size.height / 6.2)
@@ -873,7 +879,7 @@ function CameraRig({ span, spanH = 11.5, level, center, focus, narrow, tilt = 0 
     const shift = focus && !narrow && size.width > 760 ? 175 / z : 0
     const t = focus ? new THREE.Vector3(focus[0] - shift * Math.SQRT1_2, 0.4, focus[2] + shift * Math.SQRT1_2) : narrow ? new THREE.Vector3(center[0], -0.2, center[2]) : new THREE.Vector3(0, -0.2, 0)
     goal.current = { zoom: z * Math.pow(1.2, level), t, moving: true }
-  }, [size.width, size.height, span, spanH, level, narrow, focus?.[0], focus?.[2], center[0], center[2]])
+  }, [size.width, size.height, span, spanH, level, narrow, focus?.[0], focus?.[2], center[0], center[2], resetKey])
   useFrame((_, dt) => {
     const g = goal.current
     if (!g.moving) return
@@ -924,9 +930,11 @@ export interface IslandsProps {
   quiet?: boolean
   /** tilt steps: up looks more from above, down more from the side */
   tilt?: number
+  /** change it to ease the camera back to the starting view */
+  resetKey?: number
 }
 
-export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground, quiet = false, tilt = 0 }: IslandsProps) {
+export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground, quiet = false, tilt = 0, resetKey = 0 }: IslandsProps) {
   const n = process.stages.length
   const items = n + 2
   // the quiet overview spreads the islands out so their names have room
@@ -1104,9 +1112,10 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
           {!compact && walk && <Confetti at={avatarTarget} nonce={walk.nonce} />}
         </group>
       <ContactShadows position={[0, -2.3, 0]} scale={Math.max(cols * gap, rows * rowGap) * 1.6} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
-      {/* the quiet overview: drag to move the map around (on phones the page keeps scrolling instead) */}
-      {!compact && <OrbitControls makeDefault enablePan={quiet && !narrow} screenSpacePanning mouseButtons={quiet ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN } : undefined} enableZoom={false} enableRotate={!quiet} minPolarAngle={0.55} maxPolarAngle={1.15} />}
-      <CameraRig span={layoutSpan(cols, rows, space).w} spanH={layoutSpan(cols, rows, space).h} level={zoomLevel} tilt={tilt} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
+      {/* the quiet overview uses the mouse: scroll to zoom, drag to turn and tilt, right-drag to move (phones keep scrolling the page) */}
+      {!compact && <OrbitControls makeDefault enablePan={quiet && !narrow} screenSpacePanning enableZoom={quiet && !narrow} zoomSpeed={0.6} minZoom={8} maxZoom={160}
+        enableRotate={!quiet || !narrow} minPolarAngle={quiet ? 0.45 : 0.55} maxPolarAngle={quiet ? 1.25 : 1.15} />}
+      <CameraRig span={layoutSpan(cols, rows, space).w} spanH={layoutSpan(cols, rows, space).h} level={zoomLevel} tilt={tilt} resetKey={resetKey} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
     </div>
   )
