@@ -759,18 +759,18 @@ function Bridge({ curve, state = 'plain', color = '#1D4ED8' }: { curve: THREE.Cu
 /** How many islands per row: one row for short processes, then a winding road of 2-3 rows. */
 const GAP = 5.4, ROW_GAP = 11
 /** How far the camera has to see for a layout (screen units), used to fit it. */
-export const layoutSpan = (cols: number, rows: number) => ({
-  w: (cols - 1) * GAP + 5.2 + (rows > 1 ? 3.5 : 0),
-  h: rows > 1 ? 9.5 + (rows - 1) * ROW_GAP * 0.5 : 11.5,
+export const layoutSpan = (cols: number, rows: number, s = 1) => ({
+  w: (cols - 1) * GAP * s + 5.2 + (rows > 1 ? 3.5 * s : 0),
+  h: rows > 1 ? 9.5 + (rows - 1) * ROW_GAP * s * 0.5 : 11.5,
 })
 /** Islands per row: whichever of 1, 2 or 3 rows shows the islands biggest in this space. Phones get 2 per row. */
-export function roadLayout(items: number, narrow = false, w = 1200, h = 450) {
+export function roadLayout(items: number, narrow = false, w = 1200, h = 450, s = 1) {
   if (narrow) return { cols: 2, rows: Math.ceil(items / 2) }
   let best = { cols: items, rows: 1 }, top = 0
   for (let r = 1; r <= 3; r++) {
     const cols = Math.ceil(items / r), rows = Math.ceil(items / cols)
     if (r > 1 && cols < 3) break
-    const sp = layoutSpan(cols, rows)
+    const sp = layoutSpan(cols, rows, s)
     const z = Math.min(w / (sp.w * 1.04), h / sp.h)
     if (z > top * 1.04) { top = z; best = { cols, rows } } // a clear win is needed to add a row
   }
@@ -916,7 +916,9 @@ export interface IslandsProps {
 export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground, quiet = false }: IslandsProps) {
   const n = process.stages.length
   const items = n + 2
-  const gap = GAP
+  // the quiet overview spreads the islands out so their names have room
+  const space = quiet ? 1.45 : 1
+  const gap = GAP * space
   const narrowEarly = useNarrow()
   const wrap = useRef<HTMLDivElement>(null)
   const [box, setBox] = useState({ w: 1200, h: 450 })
@@ -926,8 +928,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
     ro.observe(el); return () => ro.disconnect()
   }, [])
   // the quiet overview reads best as one road, left to right
-  const { cols, rows } = quiet && !narrowEarly && items <= 8 && box.w >= 1100 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h)
-  const rowGap = ROW_GAP
+  const { cols, rows } = quiet && !narrowEarly && items <= 8 && box.w >= 1100 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h, space)
+  const rowGap = ROW_GAP * space
   const amp = rows > 1 ? 1.3 : 1.5
   // The camera looks from (1,1,1): screen-right is (1,0,-1) and screen-down is (1,0,1).
   // Islands run along a winding road: rows go left→right, then right→left, each island a little up or down.
@@ -945,8 +947,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
     const [ax, ay] = screenOf(i), [bx, by] = screenOf(i + 1)
     const turn = Math.floor(i / cols) !== Math.floor((i + 1) / cols)
     const side = ax > 0 ? 1 : -1
-    const c1 = turn ? [ax + side * 4.2, ay + rowGap * 0.12] : [ax + (bx - ax) * 0.5, ay]
-    const c2 = turn ? [bx + side * 4.2, by - rowGap * 0.12] : [bx - (bx - ax) * 0.5, by]
+    const c1 = turn ? [ax + side * 4.2 * space, ay + rowGap * 0.12] : [ax + (bx - ax) * 0.5, ay]
+    const c2 = turn ? [bx + side * 4.2 * space, by - rowGap * 0.12] : [bx - (bx - ax) * 0.5, by]
     const v = (p: number[]) => new THREE.Vector3(...toWorld(p[0], p[1]))
     return new THREE.CubicBezierCurve3(v([ax, ay]), v(c1), v(c2), v([bx, by]))
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1091,7 +1093,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
         </group>
       <ContactShadows position={[0, -2.3, 0]} scale={Math.max(cols * gap, rows * rowGap) * 1.6} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
       {!compact && <OrbitControls makeDefault enablePan={false} enableZoom={false} enableRotate={!quiet} minPolarAngle={0.55} maxPolarAngle={1.15} />}
-      <CameraRig span={layoutSpan(cols, rows).w} spanH={layoutSpan(cols, rows).h} level={zoomLevel} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
+      <CameraRig span={layoutSpan(cols, rows, space).w} spanH={layoutSpan(cols, rows, space).h} level={zoomLevel} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
     </div>
   )
