@@ -43,6 +43,12 @@ export interface Step {
   resourceIds?: string[]
   /** true once a person edited this step's resources, so auto-assign leaves it alone */
   resourcesTouched?: boolean
+  /** "Why it matters" — one plain line shown on the guided pages */
+  why?: string
+  /** "How to do it" — a few short lines, in order */
+  how?: string[]
+  /** the linked resources a person must have for this step (the others are nice to have) */
+  mustIds?: string[]
 }
 
 export type ResourceCategory = 'form' | 'client-doc' | 'guide' | 'policy' | 'process'

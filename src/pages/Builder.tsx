@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm'
 import Islands3D from '@/three/Islands3D'
 import { canBuild, canEdit, personaUser, useData, useSession } from '@/store/store'
-import { ROLE_COLORS, STAGE_COLORS, tint, uid, type LibraryItem, type Process, type ResourceCategory, type RoleKind, type SceneKind, type StepKind } from '@/lib/types'
+import { ROLE_COLORS, STAGE_COLORS, tint, uid, type LibraryItem, type Process, type ResourceCategory, type RoleKind, type SceneKind, type Step, type StepKind } from '@/lib/types'
 import { CATEGORIES, autoAssign, catOf, suggestFor, suggestLinked } from '@/lib/resources'
 import { displayName, roleKind, stepCount } from '@/lib/derive'
 import { applyOps, summariseNotes, type Op } from '@/ai/ops'
@@ -588,6 +588,35 @@ function Editor({ initial }: { initial: Process }) {
                       onChange={(ids) => setDraft((d) => ({ ...d, steps: d.steps.map((x) => x.id === stepSel.id ? { ...x, resourceIds: ids, resourcesTouched: true } : x) }))}
                       onCreate={(it) => addLibraryItems([it])} />
                   )}
+                  {(stepSel.kind === 'step' || stepSel.kind === 'decision') && (() => {
+                    const patch = (fn: (s: Step) => Partial<Step>) => setDraft((d) => ({ ...d, steps: d.steps.map((x) => x.id === stepSel.id ? { ...x, ...fn(x) } : x) }))
+                    const linked = (stepSel.resourceIds ?? []).map((id) => library.find((x) => x.id === id)).filter(Boolean) as LibraryItem[]
+                    return (
+                      <>
+                        <Field label="Why it matters (one line)"><input className={inputCls} value={stepSel.why ?? ''} placeholder="e.g. So nobody is trained on what they already know"
+                          onChange={(e) => { const v = e.target.value; patch(() => ({ why: v || undefined })) }} /></Field>
+                        <Field label="How to do it (one short line each)">
+                          <textarea className={cn(inputCls, 'h-auto min-h-[96px] py-2 leading-snug')} rows={4} value={(stepSel.how ?? []).join('\n')} placeholder={'Open the client record\nCheck the support plan'}
+                            onChange={(e) => { const v = e.target.value.split('\n'); patch(() => ({ how: v.some((l) => l.trim()) ? v : undefined })) }}
+                            onBlur={() => patch((s) => ({ how: s.how?.map((l) => l.trim()).filter(Boolean) }))} />
+                        </Field>
+                        {linked.length > 0 && (
+                          <div className="flex flex-col gap-1.5">
+                            <span className="text-xs font-bold text-on-surface-variant">Which of these must they have?</span>
+                            {linked.map((it) => {
+                              const on = (stepSel.mustIds ?? []).includes(it.id)
+                              return (
+                                <label key={it.id} className="flex cursor-pointer items-center gap-2 text-[13px]">
+                                  <input type="checkbox" checked={on} onChange={() => patch((s) => ({ mustIds: on ? (s.mustIds ?? []).filter((x) => x !== it.id) : [...(s.mustIds ?? []), it.id] }))} />
+                                  {it.title} <span className="text-[11px] text-on-surface-variant">{on ? 'must have' : 'nice to have'}</span>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </>
+                    )
+                  })()}
                   <p className="m-0 text-xs text-on-surface-variant">Tip: drag from the dot on a step's right edge to another step to connect them.</p>
                 </>
               )}

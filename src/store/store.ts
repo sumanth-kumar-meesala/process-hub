@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage, type StateStorage } from 'zustand/middleware'
 import { get, set, del } from 'idb-keyval'
-import { SEED } from '@/data/seed'
+import { SEED, withGuide } from '@/data/seed'
 import { SEED_LIBRARY } from '@/data/library'
 import { SEED_GLOSSARY, type Term } from '@/data/glossary'
 import { SEED_SYSTEMS, type InternalSystem } from '@/data/systems'
@@ -82,13 +82,15 @@ export const useData = create<DataState>()(
     }),
     {
       name: 'process-hub-data',
-      version: 8,
+      version: 10,
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ processes: s.processes, people: s.people, library: s.library, glossary: s.glossary, systems: s.systems }),
       // v2 adds the shared resource library: untouched starter processes get the new version,
       // everything else gets library items assigned automatically
       migrate: (old, version) => {
         const st = (old ?? {}) as { processes?: Process[]; people?: Person[]; library?: LibraryItem[]; glossary?: Term[]; systems?: InternalSystem[] }
+        // v10: FS25 steps get drafted "why it matters", "how to do it" and must-have documents (owner's own text is kept)
+        if (version < 10 && st.processes) st.processes = st.processes.map(withGuide)
         if (version < 4 && !st.glossary) st.glossary = SEED_GLOSSARY
         if (version < 5 && !st.systems) st.systems = SEED_SYSTEMS
         if (version < 6 && st.processes) st.processes = st.processes.map(fixStageNames)

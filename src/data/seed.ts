@@ -1,4 +1,5 @@
 import type { Edge, Process, Step } from '@/lib/types'
+import { FS25_GUIDE } from './guideSeed'
 
 /**
  * Starter processes.
@@ -399,4 +400,12 @@ const p2p: Process = {
   linkedIds: ['lib-policy-procurement', 'lib-policy-delegation', 'lib-policy-conflict'],
 }
 
-export const SEED: Process[] = [fs25, onboarding, exit, leave, p2p]
+/** Adds the drafted "why", "how" and must-have documents to steps that don't have their own yet. */
+export const withGuide = (p: Process): Process => p.id !== fs25.id ? p : {
+  ...p, steps: p.steps.map((s) => {
+    const g = FS25_GUIDE[s.id]
+    return g ? { ...s, why: s.why ?? g.why, how: s.how ?? g.how, mustIds: s.mustIds ?? g.mustIds.filter((id) => (s.resourceIds ?? []).includes(id)) } : s
+  }),
+}
+
+export const SEED: Process[] = [withGuide(fs25), onboarding, exit, leave, p2p]
