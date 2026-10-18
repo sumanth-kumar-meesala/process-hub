@@ -758,6 +758,8 @@ function Bridge({ curve, state = 'plain', color = '#1D4ED8' }: { curve: THREE.Cu
 
 /** How many islands per row: one row for short processes, then a winding road of 2-3 rows. */
 const GAP = 5.4, ROW_GAP = 11
+/** In the quiet overview, names sit just below an island's front corner so they don't cover it. */
+const LABEL_Q: V3 = [2.25, -1.55, 2.25]
 /** How far the camera has to see for a layout (screen units), used to fit it. */
 export const layoutSpan = (cols: number, rows: number, s = 1) => ({
   w: (cols - 1) * GAP * s + 5.2 + (rows > 1 ? 3.5 * s : 0),
@@ -1052,10 +1054,9 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                   )
                 })()}
                 {!compact && (
-                  <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? (focus !== null ? 0 : 0.3) : 1 }}>
+                  <Html position={quiet ? LABEL_Q : [1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? (focus !== null ? 0 : 0.3) : 1 }}>
                     <div className={quiet ? 'flex items-center gap-2 whitespace-nowrap rounded-full border-2 bg-white py-1 pl-1 pr-3.5 text-[14px] font-extrabold shadow-sm' : 'flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold'} style={{ borderColor: s.color }}>
                       <span className={quiet ? 'flex h-7 w-7 items-center justify-center rounded-full text-[13px] text-white' : 'flex h-6 w-6 items-center justify-center rounded-full text-xs text-white'} style={{ background: s.color }}>{k + 1}</span>{s.short}
-                      {quiet && hover === k && <span className="text-[13px] font-bold text-[#4A5163]">· see the steps →</span>}
                     </div>
                   </Html>
                 )}
@@ -1075,11 +1076,11 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
             {Array.from({ length: Math.max(1, Math.min(3, process.outcomes.length)) }).map((_, i) => (
               <mesh key={i} position={[-1.1 + i * 1.1, 0.25, 1.2 - (i % 2) * 2.3]}><sphereGeometry args={[0.22, 16, 12]} /><M c="#16A34A" /></mesh>
             ))}
-            {!compact && focus === null && <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}><div className="whitespace-nowrap rounded-full border-[1.5px] border-teal-700 bg-white px-3.5 py-1.5 text-[13px] font-extrabold">It's done when</div></Html>}
+            {!compact && focus === null && <Html position={quiet ? LABEL_Q : [1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}><div className="whitespace-nowrap rounded-full border-[1.5px] border-teal-700 bg-white px-3.5 py-1.5 text-[13px] font-extrabold">It's done when</div></Html>}
           </Island>
 
           {!compact && focus === null && (
-            <Html position={[posOf(0)[0] + 1.9, -0.4, posOf(0)[2] + 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
+            <Html position={quiet ? [posOf(0)[0] + LABEL_Q[0], LABEL_Q[1], posOf(0)[2] + LABEL_Q[2]] : [posOf(0)[0] + 1.9, -0.4, posOf(0)[2] + 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none' }}>
               <div className="whitespace-nowrap rounded-full border border-slate-400 bg-white px-3.5 py-1.5 text-[13px] font-extrabold">It starts when</div>
             </Html>
           )}
