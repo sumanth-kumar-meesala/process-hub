@@ -37,7 +37,7 @@ function ProcessView({ proc, view }: { proc: Process; view: '3d' | 'sidebar' }) 
   const [hover, setHover] = useState<number | null>(null)
   // map view: zoom and tilt steps from the buttons; it starts at the standard angle. Reset also re-centres after dragging.
   // the Sidebar view has the full width, so it starts a little closer
-  const DEFAULT_TILT = -2, DEFAULT_ZOOM = sidebar ? 0.7 : 0
+  const DEFAULT_TILT = -2, DEFAULT_ZOOM = sidebar ? 1.4 : 0
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [tilt, setTilt] = useState(DEFAULT_TILT)
   const [resetKey, setResetKey] = useState(0)
