@@ -30,9 +30,9 @@ function ProcessView({ proc }: { proc: Process }) {
   const can3d = useMemo(hasWebGL, [])
   const nav = useNavigate()
   const [hover, setHover] = useState<number | null>(null)
-  // map view: zoom and tilt steps from the buttons; it starts a little tilted (more from the side). Reset also re-centres after dragging.
-  const DEFAULT_TILT = -1
-  const [zoom, setZoom] = useState(0)
+  // map view: zoom and tilt steps from the buttons; it starts at the standard angle. Reset also re-centres after dragging.
+  const DEFAULT_TILT = -2, DEFAULT_ZOOM = 0.5
+  const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [tilt, setTilt] = useState(DEFAULT_TILT)
   const [resetKey, setResetKey] = useState(0)
   // the stage shown in the side panel: always one, starting with the first (or the first that's part of the chosen role's work)
@@ -98,10 +98,10 @@ function ProcessView({ proc }: { proc: Process }) {
                       <MapBtn label="Zoom out" disabled={zoom <= -3} onClick={() => setZoom((z) => z - 1)}><ZoomOut size={15} /></MapBtn>
                       <MapBtn label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom((z) => z + 1)}><ZoomIn size={15} /></MapBtn>
                       <span className="mx-0.5 h-4 w-px bg-outline-variant" aria-hidden />
-                      <MapBtn label="Tilt down (more from the side)" disabled={tilt <= -2} onClick={() => setTilt((t) => t - 1)}><ChevronDown size={15} /></MapBtn>
+                      <MapBtn label="Tilt down (more from the side)" disabled={tilt <= -3} onClick={() => setTilt((t) => t - 1)}><ChevronDown size={15} /></MapBtn>
                       <MapBtn label="Tilt up (more from above)" disabled={tilt >= 4} onClick={() => setTilt((t) => t + 1)}><ChevronUp size={15} /></MapBtn>
                       <span className="mx-0.5 h-4 w-px bg-outline-variant" aria-hidden />
-                      <MapBtn label="Reset the view" onClick={() => { setZoom(0); setTilt(DEFAULT_TILT); setResetKey((k) => k + 1) }}><RotateCcw size={14} /></MapBtn>
+                      <MapBtn label="Reset the view" onClick={() => { setZoom(DEFAULT_ZOOM); setTilt(DEFAULT_TILT); setResetKey((k) => k + 1) }}><RotateCcw size={14} /></MapBtn>
                     </div>
                   </div>
                   <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">

@@ -861,7 +861,7 @@ function CameraRig({ span, spanH = 11.5, level, center, focus, narrow, tilt = 0,
   // where the camera sits relative to what it looks at: the usual corner view, tilted up (more from above) or down
   const off = useRef(new THREE.Vector3(18, 16, 18))
   const offGoal = useMemo(() => {
-    const r = Math.hypot(18, 16, 18), polar = THREE.MathUtils.clamp(Math.acos(16 / r) - tilt * 0.14, 0.35, 1.3)
+    const r = Math.hypot(18, 16, 18), polar = THREE.MathUtils.clamp(Math.acos(16 / r) - tilt * 0.14, 0.35, 1.42)
     return new THREE.Vector3(r * Math.sin(polar) * Math.SQRT1_2, r * Math.cos(polar), r * Math.sin(polar) * Math.SQRT1_2)
   }, [tilt])
   useEffect(() => { goal.current.moving = true }, [offGoal])
@@ -940,7 +940,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
   // the quiet overview spreads the islands out so their names have room
   const space = quiet ? 1.45 : 1
   // rows sit further apart still, so each stage name has clear room below its island
-  const rowSpace = quiet ? 1.85 : 1
+  const rowSpace = quiet ? 2 : 1
   const gap = GAP * space
   const narrowEarly = useNarrow()
   const wrap = useRef<HTMLDivElement>(null)
@@ -1116,7 +1116,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
       <ContactShadows position={[0, -2.3, 0]} scale={Math.max(cols * gap, rows * rowGap) * 1.6} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
       {/* the quiet overview: drag to move the map (zoom and tilt come from the page's buttons); phones keep scrolling the page */}
       {!compact && <OrbitControls makeDefault enablePan={quiet && !narrow} screenSpacePanning panSpeed={0.6} mouseButtons={quiet ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN } : undefined}
-        enableZoom={false} enableRotate={!quiet} minPolarAngle={quiet ? 0.35 : 0.55} maxPolarAngle={quiet ? 1.3 : 1.15} />}
+        enableZoom={false} enableRotate={!quiet} minPolarAngle={quiet ? 0.35 : 0.55} maxPolarAngle={quiet ? 1.42 : 1.15} />}
       <CameraRig span={layoutSpan(cols, rows, space, rowSpace).w} spanH={layoutSpan(cols, rows, space, rowSpace).h} level={zoomLevel} tilt={tilt} resetKey={resetKey} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
     </div>
