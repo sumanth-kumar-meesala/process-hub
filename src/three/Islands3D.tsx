@@ -855,9 +855,16 @@ function Avatar({ target, label }: { target: V3; label: string }) {
 
 /** Fits the island chain to the canvas, or glides in on one island when `focus` is set.
  *  Narrow screens follow the current stage. +/- buttons outside change `level`. */
-function CameraRig({ span, spanH = 11.5, level, center, focus, narrow }: { span: number; spanH?: number; level: number; center: V3; focus: V3 | null; narrow: boolean }) {
+function CameraRig({ span, spanH = 11.5, level, center, focus, narrow, tilt = 0 }: { span: number; spanH?: number; level: number; center: V3; focus: V3 | null; narrow: boolean; tilt?: number }) {
   const { camera, size, controls } = useThree()
   const goal = useRef({ zoom: 40, t: new THREE.Vector3(), moving: true })
+  // where the camera sits relative to what it looks at: the usual corner view, tilted up (more from above) or down
+  const off = useRef(new THREE.Vector3(18, 16, 18))
+  const offGoal = useMemo(() => {
+    const r = Math.hypot(18, 16, 18), polar = THREE.MathUtils.clamp(Math.acos(16 / r) - tilt * 0.14, 0.35, 1.3)
+    return new THREE.Vector3(r * Math.sin(polar) * Math.SQRT1_2, r * Math.cos(polar), r * Math.sin(polar) * Math.SQRT1_2)
+  }, [tilt])
+  useEffect(() => { goal.current.moving = true }, [offGoal])
   useEffect(() => {
     const fitAll = Math.min(size.width / (span * 1.04), size.height / spanH)
     const zoomIn = Math.min(size.width / 8.5, size.height / 6.2)
@@ -875,11 +882,13 @@ function CameraRig({ span, spanH = 11.5, level, center, focus, narrow }: { span:
     const cur = c?.target ?? new THREE.Vector3()
     cur.x = THREE.MathUtils.damp(cur.x, g.t.x, 5, dt); cur.y = THREE.MathUtils.damp(cur.y, g.t.y, 5, dt); cur.z = THREE.MathUtils.damp(cur.z, g.t.z, 5, dt)
     cam.zoom = THREE.MathUtils.damp(cam.zoom, g.zoom, 5, dt)
-    cam.position.set(cur.x + 18, cur.y + 16, cur.z + 18)
+    const o = off.current
+    o.x = THREE.MathUtils.damp(o.x, offGoal.x, 5, dt); o.y = THREE.MathUtils.damp(o.y, offGoal.y, 5, dt); o.z = THREE.MathUtils.damp(o.z, offGoal.z, 5, dt)
+    cam.position.set(cur.x + o.x, cur.y + o.y, cur.z + o.z)
     cam.lookAt(cur)
     c?.update?.()
     cam.updateProjectionMatrix()
-    if (Math.abs(cam.zoom - g.zoom) < 0.05 && cur.distanceTo(g.t) < 0.01) g.moving = false
+    if (Math.abs(cam.zoom - g.zoom) < 0.05 && cur.distanceTo(g.t) < 0.01 && off.current.distanceTo(offGoal) < 0.01) g.moving = false
   })
   return null
 }
@@ -913,9 +922,11 @@ export interface IslandsProps {
   onBackground?: () => void
   /** the simple overview: big stage names, no system tags or loop labels until you point at a stage, no avatar, no turning */
   quiet?: boolean
+  /** tilt steps: up looks more from above, down more from the side */
+  tilt?: number
 }
 
-export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground, quiet = false }: IslandsProps) {
+export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground, quiet = false, tilt = 0 }: IslandsProps) {
   const n = process.stages.length
   const items = n + 2
   // the quiet overview spreads the islands out so their names have room
@@ -1093,8 +1104,9 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
           {!compact && walk && <Confetti at={avatarTarget} nonce={walk.nonce} />}
         </group>
       <ContactShadows position={[0, -2.3, 0]} scale={Math.max(cols * gap, rows * rowGap) * 1.6} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
-      {!compact && <OrbitControls makeDefault enablePan={false} enableZoom={false} enableRotate={!quiet} minPolarAngle={0.55} maxPolarAngle={1.15} />}
-      <CameraRig span={layoutSpan(cols, rows, space).w} spanH={layoutSpan(cols, rows, space).h} level={zoomLevel} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
+      {/* the quiet overview: drag to move the map around (on phones the page keeps scrolling instead) */}
+      {!compact && <OrbitControls makeDefault enablePan={quiet && !narrow} screenSpacePanning mouseButtons={quiet ? { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN } : undefined} enableZoom={false} enableRotate={!quiet} minPolarAngle={0.55} maxPolarAngle={1.15} />}
+      <CameraRig span={layoutSpan(cols, rows, space).w} spanH={layoutSpan(cols, rows, space).h} level={zoomLevel} tilt={tilt} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
     </div>
   )

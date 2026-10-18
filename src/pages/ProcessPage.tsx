@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { MousePointerClick, Pencil } from 'lucide-react'
+import { ChevronDown, ChevronUp, MousePointerClick, Pencil, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import Islands3D from '@/three/Islands3D'
@@ -30,6 +30,9 @@ function ProcessView({ proc }: { proc: Process }) {
   const can3d = useMemo(hasWebGL, [])
   const nav = useNavigate()
   const [hover, setHover] = useState<number | null>(null)
+  // map view: zoom and tilt steps (0 = the default view)
+  const [zoom, setZoom] = useState(0)
+  const [tilt, setTilt] = useState(0)
   // the stage shown in the side panel: always one, starting with the first (or the first that's part of the chosen role's work)
   const firstFor = (role: string | null) => Math.max(0, proc.stages.findIndex((s) => !role || stageRoles(proc, s).some((r) => r.id === role)))
   const [sel, setSel] = useState(() => firstFor(null))
@@ -77,11 +80,19 @@ function ProcessView({ proc }: { proc: Process }) {
                 <>
                 {/* the hint sits above the map, never on top of an island */}
                 <p className="m-0 inline-flex items-center gap-2 text-[13px] font-semibold text-on-surface-variant">
-                  <MousePointerClick size={14} aria-hidden />{run.roleObj ? <><b className="text-on-surface">{run.roleObj.name}</b>'s stages are highlighted · click a stage to see its steps</> : 'Click a stage to see its steps'}
+                  <MousePointerClick size={14} aria-hidden />{run.roleObj ? <><b className="text-on-surface">{run.roleObj.name}</b>'s stages are highlighted · click a stage to see its steps</> : 'Click a stage to see its steps'} · drag to move the map, use the buttons to zoom and tilt
                 </p>
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
                   <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
-                    <Islands3D process={proc} active={sel} quiet zoomLevel={0} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
+                    <Islands3D process={proc} active={sel} quiet zoomLevel={zoom} tilt={tilt} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
+                    <div role="group" aria-label="Map view" className="glass absolute bottom-3 right-3 z-[40] flex items-center gap-0.5 rounded-full p-1">
+                      <MapBtn label="Zoom out" disabled={zoom <= -3} onClick={() => setZoom((z) => z - 1)}><ZoomOut size={18} /></MapBtn>
+                      <MapBtn label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom((z) => z + 1)}><ZoomIn size={18} /></MapBtn>
+                      <span className="mx-1 h-6 w-px bg-outline-variant" aria-hidden />
+                      <MapBtn label="Tilt down (more from the side)" disabled={tilt <= -2} onClick={() => setTilt((t) => t - 1)}><ChevronDown size={18} /></MapBtn>
+                      <MapBtn label="Tilt up (more from above)" disabled={tilt >= 4} onClick={() => setTilt((t) => t + 1)}><ChevronUp size={18} /></MapBtn>
+                      {(zoom !== 0 || tilt !== 0) && <><span className="mx-1 h-6 w-px bg-outline-variant" aria-hidden /><MapBtn label="Reset the view" onClick={() => { setZoom(0); setTilt(0) }}><RotateCcw size={17} /></MapBtn></>}
+                    </div>
                   </div>
                   <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
                     <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onStage={openStage} />
@@ -121,3 +132,9 @@ function ProcessView({ proc }: { proc: Process }) {
 function hasWebGL() {
   try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')) } catch { return false }
 }
+
+/** A round button in the map's zoom and tilt controls. */
+const MapBtn = ({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) => (
+  <button onClick={onClick} disabled={disabled} aria-label={label} title={label}
+    className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-on-surface hover:bg-white disabled:cursor-default disabled:opacity-35">{children}</button>
+)
