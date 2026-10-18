@@ -36,7 +36,8 @@ function ProcessView({ proc, view }: { proc: Process; view: '3d' | 'sidebar' }) 
   const nav = useNavigate()
   const [hover, setHover] = useState<number | null>(null)
   // map view: zoom and tilt steps from the buttons; it starts at the standard angle. Reset also re-centres after dragging.
-  const DEFAULT_TILT = -2, DEFAULT_ZOOM = 0
+  // the Sidebar view has the full width, so it starts a little closer
+  const DEFAULT_TILT = -2, DEFAULT_ZOOM = sidebar ? 0.7 : 0
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const [tilt, setTilt] = useState(DEFAULT_TILT)
   const [resetKey, setResetKey] = useState(0)
@@ -104,8 +105,8 @@ function ProcessView({ proc, view }: { proc: Process; view: '3d' | 'sidebar' }) 
                   <MousePointerClick size={14} aria-hidden />{run.roleObj ? <><b className="text-on-surface">{run.roleObj.name}</b>'s stages are highlighted · click a stage to see its steps</> : 'Click a stage to see its steps'} · drag to move the map
                 </p>
                 <div className={cn('grid gap-4', !sidebar && 'lg:grid-cols-[minmax(0,1fr)_400px]')}>
-                  <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
-                    <Islands3D process={proc} active={showPanel ? sel : -1} quiet zoomLevel={zoom} tilt={tilt} resetKey={resetKey} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} onBackground={sidebar ? () => setPanelOpen(false) : undefined} />
+                  <div className={cn('relative -mx-2 max-sm:h-[420px]', sidebar ? 'h-[min(680px,calc(100vh-280px))] min-h-[460px]' : 'h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px]')}>
+                    <Islands3D process={proc} active={showPanel ? sel : -1} quiet zoomLevel={zoom} tilt={tilt} resetKey={resetKey} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} onBackground={sidebar ? () => setPanelOpen(false) : undefined} preferRows={sidebar && n >= 4 ? 2 : undefined} />
                     <div role="group" aria-label="Map view" className="glass absolute bottom-3 left-3 z-[40] flex items-center gap-0 rounded-full p-0.5">
                       <MapBtn label="Zoom out" disabled={zoom <= -3} onClick={() => setZoom((z) => z - 1)}><ZoomOut size={15} /></MapBtn>
                       <MapBtn label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom((z) => z + 1)}><ZoomIn size={15} /></MapBtn>

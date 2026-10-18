@@ -932,9 +932,11 @@ export interface IslandsProps {
   tilt?: number
   /** change it to ease the camera back to the starting view */
   resetKey?: number
+  /** lay the road out over this many rows (e.g. 2 on a wide map, so the islands come out bigger) */
+  preferRows?: number
 }
 
-export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground, quiet = false, tilt = 0, resetKey = 0 }: IslandsProps) {
+export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground, quiet = false, tilt = 0, resetKey = 0, preferRows }: IslandsProps) {
   const n = process.stages.length
   const items = n + 2
   // the quiet overview spreads the islands out so their names have room
@@ -950,8 +952,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
     const ro = new ResizeObserver(([e]) => { const r = e.contentRect; if (r.width && r.height) setBox({ w: r.width, h: r.height }) })
     ro.observe(el); return () => ro.disconnect()
   }, [])
-  // the quiet overview reads best as one road, left to right
-  const { cols, rows } = quiet && !narrowEarly && items <= 8 && box.w >= 1100 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h, space, rowSpace)
+  // rows are chosen to show the islands as big as the space allows (a wide map gets a winding road over two rows)
+  const { cols, rows } = preferRows && !narrowEarly ? { cols: Math.ceil(items / preferRows), rows: Math.min(preferRows, items) } : roadLayout(items, narrowEarly && !compact, box.w, box.h, space, rowSpace)
   const rowGap = ROW_GAP * rowSpace
   // islands step up and down along the road; gentler in the overview so names don't run into neighbours
   const amp = quiet ? 0.6 : rows > 1 ? 1.3 : 1.5
