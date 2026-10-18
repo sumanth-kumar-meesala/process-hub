@@ -85,13 +85,13 @@ function ProcessView({ proc }: { proc: Process }) {
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
                   <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
                     <Islands3D process={proc} active={sel} quiet zoomLevel={zoom} tilt={tilt} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
-                    <div role="group" aria-label="Map view" className="glass absolute bottom-3 right-3 z-[40] flex items-center gap-0.5 rounded-full p-1">
-                      <MapBtn label="Zoom out" disabled={zoom <= -3} onClick={() => setZoom((z) => z - 1)}><ZoomOut size={18} /></MapBtn>
-                      <MapBtn label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom((z) => z + 1)}><ZoomIn size={18} /></MapBtn>
-                      <span className="mx-1 h-6 w-px bg-outline-variant" aria-hidden />
-                      <MapBtn label="Tilt down (more from the side)" disabled={tilt <= -2} onClick={() => setTilt((t) => t - 1)}><ChevronDown size={18} /></MapBtn>
-                      <MapBtn label="Tilt up (more from above)" disabled={tilt >= 4} onClick={() => setTilt((t) => t + 1)}><ChevronUp size={18} /></MapBtn>
-                      {(zoom !== 0 || tilt !== 0) && <><span className="mx-1 h-6 w-px bg-outline-variant" aria-hidden /><MapBtn label="Reset the view" onClick={() => { setZoom(0); setTilt(0) }}><RotateCcw size={17} /></MapBtn></>}
+                    <div role="group" aria-label="Map view" className="glass absolute bottom-3 left-3 z-[40] flex items-center gap-0 rounded-full p-0.5">
+                      <MapBtn label="Zoom out" disabled={zoom <= -3} onClick={() => setZoom((z) => z - 1)}><ZoomOut size={15} /></MapBtn>
+                      <MapBtn label="Zoom in" disabled={zoom >= 4} onClick={() => setZoom((z) => z + 1)}><ZoomIn size={15} /></MapBtn>
+                      <span className="mx-0.5 h-4 w-px bg-outline-variant" aria-hidden />
+                      <MapBtn label="Tilt down (more from the side)" disabled={tilt <= -2} onClick={() => setTilt((t) => t - 1)}><ChevronDown size={15} /></MapBtn>
+                      <MapBtn label="Tilt up (more from above)" disabled={tilt >= 4} onClick={() => setTilt((t) => t + 1)}><ChevronUp size={15} /></MapBtn>
+                      {(zoom !== 0 || tilt !== 0) && <><span className="mx-0.5 h-4 w-px bg-outline-variant" aria-hidden /><MapBtn label="Reset the view" onClick={() => { setZoom(0); setTilt(0) }}><RotateCcw size={14} /></MapBtn></>}
                     </div>
                   </div>
                   <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
@@ -136,5 +136,5 @@ function hasWebGL() {
 /** A round button in the map's zoom and tilt controls. */
 const MapBtn = ({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) => (
   <button onClick={onClick} disabled={disabled} aria-label={label} title={label}
-    className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-on-surface hover:bg-white disabled:cursor-default disabled:opacity-35">{children}</button>
+    className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-transparent text-on-surface hover:bg-white disabled:cursor-default disabled:opacity-35">{children}</button>
 )
