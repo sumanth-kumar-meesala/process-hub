@@ -14,7 +14,7 @@ export type Op =
   | { op: 'detach'; step: string; resource: string }
   | { op: 'set_meta'; title?: string; summary?: string; nutshell?: string; audience?: string; triggers?: string[]; outcomes?: string[] }
 
-const norm = (s: string) => s.trim().toLowerCase()
+const norm = (s: string) => s.trim().toLowerCase();
 
 export function applyOps(src: Process, ops: Op[], lib: LibraryItem[] = []): { next: Process; added: Set<string>; notes: string[]; newItems: LibraryItem[] } {
   const newItems: LibraryItem[] = []
