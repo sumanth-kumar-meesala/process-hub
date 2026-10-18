@@ -96,7 +96,7 @@ function CheckSign({ repeat = false }: { repeat?: boolean }) {
 }
 
 /** A "go back" path: an arc between islands (or a loop over one island) for checks that send work back. */
-function LoopArc({ a, b, text, short, compact, focus }: { a: V3; b: V3; text: string; short: string; compact: boolean; focus: boolean }) {
+function LoopArc({ a, b, text, short, compact, focus, label = true }: { a: V3; b: V3; text: string; short: string; compact: boolean; focus: boolean; label?: boolean }) {
   const ref = useRef<{ material: { dashOffset: number } } | null>(null)
   useFrame((_, dt) => { if (ref.current) ref.current.material.dashOffset += dt * 0.6 })
   const same = a[0] === b[0] && a[2] === b[2]
@@ -109,7 +109,7 @@ function LoopArc({ a, b, text, short, compact, focus }: { a: V3; b: V3; text: st
     <group>
       <QuadraticBezierLine ref={ref as never} start={start} end={end} mid={mid} color="#F97316" lineWidth={focus ? 5 : 3.5} dashed dashSize={0.3} gapSize={0.18} />
       <mesh position={end}><sphereGeometry args={[0.12, 12, 10]} /><meshBasicMaterial color="#F97316" /></mesh>
-      {!compact && (
+      {!compact && label && (
         <Html position={top} center zIndexRange={[11, 0]} style={{ pointerEvents: 'none' }}>
           <div className="flex items-center gap-1.5 whitespace-nowrap rounded-full bg-[#F97316] px-2.5 py-1 text-[11px] font-extrabold text-white shadow">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5" /><path d="M4 9h11a5 5 0 0 1 0 10h-3" /></svg>
@@ -909,9 +909,11 @@ export interface IslandsProps {
   walk?: WalkView | null
   /** clicked empty space (used to zoom back out) */
   onBackground?: () => void
+  /** the simple overview: big stage names, no system tags or loop labels until you point at a stage, no avatar, no turning */
+  quiet?: boolean
 }
 
-export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground }: IslandsProps) {
+export default function Islands3D({ process, active, onSelect, hover = null, onHover, roleFilter = null, compact = false, avatarLabel = 'I am here', zoomLevel = 0, focus = null, selectedStep = null, hoverStep = null, onStep, walk = null, onBackground, quiet = false }: IslandsProps) {
   const n = process.stages.length
   const items = n + 2
   const gap = GAP
@@ -923,7 +925,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
     const ro = new ResizeObserver(([e]) => { const r = e.contentRect; if (r.width && r.height) setBox({ w: r.width, h: r.height }) })
     ro.observe(el); return () => ro.disconnect()
   }, [])
-  const { cols, rows } = roadLayout(items, narrowEarly && !compact, box.w, box.h)
+  // the quiet overview reads best as one road, left to right
+  const { cols, rows } = quiet && !narrowEarly && items <= 8 ? { cols: items, rows: 1 } : roadLayout(items, narrowEarly && !compact, box.w, box.h)
   const rowGap = ROW_GAP
   const amp = rows > 1 ? 1.3 : 1.5
   // The camera looks from (1,1,1): screen-right is (1,0,-1) and screen-down is (1,0,1).
@@ -984,6 +987,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
           {roads.map((curve, i) => <Bridge key={i} curve={curve} state={bridgeState(i)} color={process.stages[Math.min(i, n - 1)]?.color ?? '#0F766E'} />)}
 
           {/* start: one flag per trigger */}
+          {/* drei's Html can drop the first label it mounts here (React 19 root unmount race), so mount an empty one first */}
+          <Html position={posOf(0)} style={{ display: 'none' }}><span /></Html>
           <Island pos={posOf(0)} color="#64748B" top="#E2E8F0" side="#64748B" dim={focus !== null}>
             {process.triggers.slice(0, 7).map((_, i) => {
               const cols = ['#2563EB', '#16A34A', '#EA580C', '#7C3AED', '#DC2626', '#0EA5E9', '#DB2777']
@@ -1028,7 +1033,7 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                     : <Person key={r.id} p={pp} color={r.color} />
                 })}
                 {!platforms && process.steps.some((x) => x.stageId === s.id && x.kind === 'decision') && <CheckSign repeat={loops.some((l) => l.from === k && l.to === k)} />}
-                {!compact && s.systems[0] && (!narrow || isActive) && (focus === null || focus === k) && (() => {
+                {!compact && s.systems[0] && (quiet ? hover === k : (!narrow || isActive)) && (focus === null || focus === k) && (() => {
                   const sys = s.systems.map(sysLabel).filter(Boolean)
                   const unsure = s.systems.some(sysUnsure)
                   return (
@@ -1046,8 +1051,9 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                 })()}
                 {!compact && (
                   <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? (focus !== null ? 0 : 0.3) : 1 }}>
-                    <div className="flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold" style={{ borderColor: s.color }}>
-                      <span className="flex h-6 w-6 items-center justify-center rounded-full text-xs text-white" style={{ background: s.color }}>{k + 1}</span>{s.short}
+                    <div className={quiet ? 'flex items-center gap-2.5 whitespace-nowrap rounded-full border-2 bg-white py-1.5 pl-1.5 pr-4 text-[16px] font-extrabold shadow-sm' : 'flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold'} style={{ borderColor: s.color }}>
+                      <span className={quiet ? 'flex h-8 w-8 items-center justify-center rounded-full text-sm text-white' : 'flex h-6 w-6 items-center justify-center rounded-full text-xs text-white'} style={{ background: s.color }}>{k + 1}</span>{s.short}
+                      {quiet && hover === k && <span className="text-[13px] font-bold text-[#4A5163]">· see the steps →</span>}
                     </div>
                   </Html>
                 )}
@@ -1077,15 +1083,15 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
           )}
           {focus === null && loops.filter((l) => l.from !== l.to).map((l) => (
             <LoopArc key={`${l.from}-${l.to}`} a={posOf(l.from + 1)} b={posOf(l.to + 1)} compact={compact}
-              focus={!narrow && (active === l.from || active === l.to)} short={l.from === l.to ? 'Repeats' : `${l.label || 'Back'} → stage ${l.to + 1}`}
+              focus={!narrow && (quiet ? hover === l.from || hover === l.to : active === l.from || active === l.to)} label={!quiet || hover === l.from || hover === l.to} short={l.from === l.to ? 'Repeats' : `${l.label || 'Back'} → stage ${l.to + 1}`}
               text={l.from === l.to ? `${l.label || 'Not yet'}? Repeat “${l.toStep}”` : l.label ? `${l.label} → back to “${l.toStep}”` : `Back to “${l.toStep}”`} />
           ))}
-          {!compact && n > 0 && (walk || focus === null) && <Avatar target={avatarTarget} label={walk?.finished ? 'All done!' : avatarLabel} />}
+          {!compact && !quiet && n > 0 && (walk || focus === null) && <Avatar target={avatarTarget} label={walk?.finished ? 'All done!' : avatarLabel} />}
           {!compact && walk && <Confetti at={avatarTarget} nonce={walk.nonce} />}
         </group>
       <ContactShadows position={[0, -2.3, 0]} scale={Math.max(cols * gap, rows * rowGap) * 1.6} far={4} blur={2.6} opacity={0.22} color="#1E3A8A" />
-      {!compact && <OrbitControls makeDefault enablePan={false} enableZoom={false} minPolarAngle={0.55} maxPolarAngle={1.15} />}
-      <CameraRig span={layoutSpan(cols, rows).w} spanH={layoutSpan(cols, rows).h} level={zoomLevel} narrow={narrow && !compact} center={toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
+      {!compact && <OrbitControls makeDefault enablePan={false} enableZoom={false} enableRotate={!quiet} minPolarAngle={0.55} maxPolarAngle={1.15} />}
+      <CameraRig span={layoutSpan(cols, rows).w} spanH={layoutSpan(cols, rows).h} level={zoomLevel} narrow={narrow && !compact} center={quiet ? toWorld(0, 0) : toWorld(0, screenOf(n ? (walk ? Math.min(curStage, n - 1) : active) + 1 : 0)[1])} focus={focus !== null && !compact ? posOf(focus + 1) : null} />
     </Canvas>
     </div>
   )

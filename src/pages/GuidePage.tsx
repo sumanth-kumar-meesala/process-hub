@@ -26,10 +26,18 @@ function Guide({ proc }: { proc: Process }) {
   const [params, setParams] = useSearchParams()
   const v = GUIDE_VIEWS.find((x) => x.id === view) ?? GUIDE_VIEWS[0]
   // a shared link to one step opens on that step
+  // and clicking a stage on the process map opens it at that stage's first step (the reader's own, if they have one there)
   const linked = params.get('step')
+  const stageNo = params.get('stage')
   useEffect(() => {
-    if (linked && proc.steps.some((x) => x.id === linked)) { run.select(linked); setParams({}, { replace: true }) }
-  }, [linked]) // eslint-disable-line react-hooks/exhaustive-deps
+    let id = linked && proc.steps.some((x) => x.id === linked) ? linked : undefined
+    if (!id && stageNo !== null) {
+      const st = run.g.stages[Number(stageNo)]
+      id = (st?.usual.find((x) => x.mine) ?? st?.mine[0] ?? st?.all[0])?.st.id
+    }
+    if (id) run.select(id)
+    if (linked || stageNo !== null) setParams({}, { replace: true })
+  }, [linked, stageNo]) // eslint-disable-line react-hooks/exhaustive-deps
   const work = proc.steps.filter((x) => x.kind === 'step' || x.kind === 'decision')
 
   return (
