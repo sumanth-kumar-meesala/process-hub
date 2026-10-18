@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 
 /** The stage you clicked on the 3D map: who's involved, its steps (tap one for the details), systems, and the stages either side. */
 export function StageSidePanel({ proc, g, k, roleId, onClose, onStage }: {
-  proc: Process; g: Guide; k: number; roleId: string | null; onClose: () => void; onStage: (k: number) => void
+  proc: Process; g: Guide; k: number; roleId: string | null; onClose?: () => void; onStage: (k: number) => void
 }) {
   const { stage, all } = g.stages[k]
   const [open, setOpen] = useState<string | null>(() => (all.find((x) => x.mine) ?? all[0])?.st.id ?? null)
@@ -18,9 +18,9 @@ export function StageSidePanel({ proc, g, k, roleId, onClose, onStage }: {
   return (
     <aside aria-label={`Stage ${k + 1}: ${stage.title}`} className="flex h-full min-h-0 flex-col overflow-hidden rounded-[28px] border border-outline-variant bg-white shadow-[0_2px_6px_rgba(15,23,42,.06),0_24px_60px_rgba(30,58,138,.16)] max-lg:h-auto">
       <div className="relative flex flex-col gap-1.5 px-5 pb-4 pt-5" style={{ background: tint(stage.color, 0.13) }}>
-        <button onClick={onClose} aria-label="Close" className="absolute right-3.5 top-3.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-0 bg-white/80 hover:bg-white"><X size={16} /></button>
+        {onClose && <button onClick={onClose} aria-label="Close" className="absolute right-3.5 top-3.5 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border-0 bg-white/80 hover:bg-white"><X size={16} /></button>}
         <span className="text-xs font-extrabold uppercase tracking-[.06em]" style={{ color: stage.color }}>Stage {k + 1} of {n}</span>
-        <h2 className="m-0 pr-10 text-[22px] font-extrabold leading-tight">{stage.short || stage.title}</h2>
+        <h2 className={cn('m-0 text-[22px] font-extrabold leading-tight', onClose && 'pr-10')}>{stage.short || stage.title}</h2>
         <span className="text-[13px] text-on-surface-variant">{stage.title}{stage.place ? <> · <MapPin size={12} className="inline align-[-1px]" /> {stage.place}</> : ''}</span>
       </div>
 

@@ -38,14 +38,17 @@ function ProcessView({ proc }: { proc: Process }) {
   const [hover, setHover] = useState<number | null>(null)
   const [view, setView] = useState<View>('overview')
   const [asking, setAsking] = useState(false)
-  // the stage clicked on the map, shown in the side panel
-  const [sel, setSel] = useState<number | null>(null)
+  // the stage shown in the side panel: always one, starting with the first (or the first that's part of the chosen role's work)
+  const firstFor = (role: string | null) => Math.max(0, proc.stages.findIndex((s) => !role || stageRoles(proc, s).some((r) => r.id === role)))
+  const [sel, setSel] = useState(() => firstFor(null))
   const [params] = useSearchParams()
   // the same "Show steps for" and saved progress as the step-by-step guide
   const run = useGuide(proc, library)
   const n = proc.stages.length
   const hasSteps = stepCount(proc) > 0
   const openStage = (k: number) => { setAsking(false); setSel(Math.max(0, Math.min(n - 1, k))) }
+  // choosing someone in "Show steps for" moves the panel to their first stage
+  useEffect(() => { setSel(firstFor(run.role)) }, [run.role]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // "One question to start" on the home page sends people here with ?as=<role>
   useEffect(() => {
@@ -55,7 +58,7 @@ function ProcessView({ proc }: { proc: Process }) {
   }, [params, proc.roles]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setAsking(false); setSel(null) } }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setAsking(false) }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
@@ -116,19 +119,18 @@ function ProcessView({ proc }: { proc: Process }) {
             <div className="relative z-[1] flex flex-col gap-2">
               <p className="m-0 text-[15px] font-semibold text-on-surface-variant">
                 {run.roleObj ? <>The stages the <b className="text-on-surface">{run.roleObj.name}</b> is part of are highlighted. </> : null}
-                {can3d ? 'Click a stage to see its steps.' : 'Choose a stage to see its steps.'}
+                {can3d ? 'Click a stage on the map to see its steps on the right.' : 'Choose a stage to see its steps.'}
               </p>
               {can3d ? (
-                <div className={cn('grid gap-4', (sel !== null || asking) && 'lg:grid-cols-[minmax(0,1fr)_400px]')}>
+                <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px]">
                   <div className="relative -mx-2 h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-sm:h-[420px]">
-                    <Islands3D process={proc} active={sel ?? -1} quiet onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} onBackground={() => setSel(null)} />
+                    <Islands3D process={proc} active={sel} quiet zoomLevel={-1} onSelect={openStage} hover={hover} onHover={setHover} roleFilter={run.role} />
                   </div>
-                  {sel !== null && !asking && (
-                    <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
-                      <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onClose={() => setSel(null)} onStage={openStage} />
-                    </div>
-                  )}
-                  {asking && <AskPanel proc={proc} docked onClose={() => setAsking(false)} onShowStage={openStage} />}
+                  <div className="h-[min(clamp(360px,36vw,520px),calc(100vh-300px))] min-h-[340px] max-lg:h-auto">
+                    {asking
+                      ? <AskPanel proc={proc} docked onClose={() => setAsking(false)} onShowStage={openStage} />
+                      : <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onStage={openStage} />}
+                  </div>
                 </div>
               ) : (
                 <>
@@ -145,7 +147,7 @@ function ProcessView({ proc }: { proc: Process }) {
                       )
                     })}
                   </ol>
-                  {sel !== null && !asking && <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onClose={() => setSel(null)} onStage={openStage} />}
+                  {!asking && <StageSidePanel key={sel} proc={proc} g={run.g} k={sel} roleId={run.role} onStage={openStage} />}
                   {asking && <AskPanel proc={proc} docked onClose={() => setAsking(false)} onShowStage={openStage} />}
                 </>
               )}

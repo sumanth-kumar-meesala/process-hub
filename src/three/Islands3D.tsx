@@ -1051,8 +1051,8 @@ export default function Islands3D({ process, active, onSelect, hover = null, onH
                 })()}
                 {!compact && (
                   <Html position={[1.9, -0.4, 1.9]} center zIndexRange={[10, 0]} style={{ pointerEvents: 'none', opacity: dimOf(k) ? (focus !== null ? 0 : 0.3) : 1 }}>
-                    <div className={quiet ? 'flex items-center gap-2.5 whitespace-nowrap rounded-full border-2 bg-white py-1.5 pl-1.5 pr-4 text-[16px] font-extrabold shadow-sm' : 'flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold'} style={{ borderColor: s.color }}>
-                      <span className={quiet ? 'flex h-8 w-8 items-center justify-center rounded-full text-sm text-white' : 'flex h-6 w-6 items-center justify-center rounded-full text-xs text-white'} style={{ background: s.color }}>{k + 1}</span>{s.short}
+                    <div className={quiet ? 'flex items-center gap-2 whitespace-nowrap rounded-full border-2 bg-white py-1 pl-1 pr-3.5 text-[14px] font-extrabold shadow-sm' : 'flex items-center gap-2 whitespace-nowrap rounded-full border-[1.5px] bg-white py-1 pl-1 pr-3.5 text-[13px] font-extrabold'} style={{ borderColor: s.color }}>
+                      <span className={quiet ? 'flex h-7 w-7 items-center justify-center rounded-full text-[13px] text-white' : 'flex h-6 w-6 items-center justify-center rounded-full text-xs text-white'} style={{ background: s.color }}>{k + 1}</span>{s.short}
                       {quiet && hover === k && <span className="text-[13px] font-bold text-[#4A5163]">· see the steps →</span>}
                     </div>
                   </Html>
