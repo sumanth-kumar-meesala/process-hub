@@ -1,3 +1,5 @@
+// first: keep a copy of this page's HTML as loaded (used by Admin → "Prepare the page")
+import '@/lib/snapshot'
 import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter, Route, Routes } from 'react-router-dom'

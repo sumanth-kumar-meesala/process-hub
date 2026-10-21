@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { activeFolder, folderLabel, pageFolder, refreshLiveData, syncBpmn, useBpmn } from '@/store/bpmn'
 import { parseFolderUrl } from '@/lib/sharepoint'
 import { useData } from '@/store/store'
+import { inSandbox } from '@/lib/sandbox'
 
 /** Loads the Signavio processes once the saved data is ready, and again when the tab comes back after a while. */
 export function BpmnSync() {
@@ -105,18 +106,22 @@ function PageStatus() {
   return (
     <div role="status" className="flex flex-col gap-1.5 rounded-2xl bg-white px-4 py-2.5 text-[13px] text-on-surface-variant">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        {linked?.folder && (
-          <span className="inline-flex items-center gap-1.5" title={linked.folder}>
-            <FolderOpen size={14} aria-hidden /><b className="text-on-surface">{folderLabel(linked.folder)}</b>{when && ` · files linked ${when}`}
+        {(linked?.folder || when) && (
+          <span className="inline-flex items-center gap-1.5" title={linked?.folder}>
+            <FolderOpen size={14} aria-hidden />{linked?.folder ? <b className="text-on-surface">{folderLabel(linked.folder)}</b> : 'Saved in this page'}{when && ` · prepared ${when}`}{linked?.live ? ` · ${linked.live} live from SharePoint` : ''}
           </span>
         )}
         {status === 'ok' && <span className="inline-flex items-center gap-1.5"><Workflow size={14} className="text-primary" aria-hidden />{message}</span>}
         {status === 'error' && <span className="inline-flex items-center gap-1.5 text-error"><AlertTriangle size={14} aria-hidden />{message}</span>}
-        {status === 'ok' && <button onClick={refreshLiveData} className={link} title="SharePoint reads the files again and reloads the page"><RefreshCw size={13} aria-hidden />Refresh</button>}
+        {status === 'loading' && <span className="inline-flex items-center gap-1.5"><Loader2 size={14} className="animate-spin" aria-hidden />Reading the BPMN files…</span>}
+        {status === 'ok' && inSandbox && !!linked?.live && <button onClick={refreshLiveData} className={link} title="SharePoint reads the files again and reloads the page"><RefreshCw size={13} aria-hidden />Refresh</button>}
         <button onClick={() => setHelp(!help)} className={link}><HelpCircle size={13} aria-hidden />Add or remove files</button>
         {issues.length > 0 && (
           <button onClick={() => setOpen(!open)} className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[13px] font-bold text-[#9A4A00]">
-            <FileWarning size={13} aria-hidden />{issues.length} file{issues.length === 1 ? '' : 's'} couldn't be read
+            <FileWarning size={13} aria-hidden />{(() => {
+              const saved = issues.filter((x) => x.reason.startsWith('showing the copy saved')).length, bad = issues.length - saved
+              return [bad && `${bad} file${bad === 1 ? '' : 's'} couldn't be read`, saved && `${saved} shown from the saved copy`].filter(Boolean).join(' · ')
+            })()}
           </button>
         )}
       </div>
@@ -127,9 +132,8 @@ function PageStatus() {
       )}
       {help && (
         <div className="border-t border-surface-mid pt-2 leading-relaxed">
-          A SharePoint page can't look inside a folder by itself, so the BPMN files are linked into the page when it's prepared.
-          A file that's changed in Signavio and exported again under the same name shows the new version here automatically.
-          To add or remove files: open <b>process-hub.html</b> on your computer, go to <b>Admin → Processes → Prepare the SharePoint page</b>, choose the folder, and upload the page it makes in place of this one (up to {32} files per page).
+          The BPMN files are saved inside this page, and it turns them into processes each time it opens.{linked?.live ? <> {linked.live} of them are linked to SharePoint, so a file changed in Signavio and exported again under the same name shows the new version here by itself.</> : ''}{' '}
+          To add or remove files: open <b>process-hub.html</b> on your computer (double-click it), go to <b>Admin → Processes → Prepare the page</b>, choose the files, and upload the page it saves in place of this one.
         </div>
       )}
     </div>

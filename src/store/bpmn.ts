@@ -4,6 +4,7 @@ import { bpmnToProcess } from '@/lib/bpmn'
 import { listBpmnFiles, onSharePoint, parseFolderUrl, readSpFile, SpError } from '@/lib/sharepoint'
 import { useData } from './store'
 import { inSandbox, localOrMemory } from '@/lib/sandbox'
+import { pageFiles, unpackFile, type PageFile } from '@/lib/pagefiles'
 
 // ---------- SharePoint HTML pages: files linked into the page ("live data") ----------
 
@@ -30,37 +31,56 @@ const LIVE_ERRORS: Record<string, string> = {
   'decode-failed': "the file couldn't be read as text", 'parse-failed': "the file couldn't be read", 'invalid-request': 'the link to the file is not valid',
 }
 
-function loadLiveData() {
+/**
+ * Builds the processes from the BPMN files that come with this page: the copies stored inside it ("Prepare the page"),
+ * and — on SharePoint — the live versions SharePoint hands over for files linked to a SharePoint folder.
+ * The live version wins; the stored copy is used where there is none (on your computer, or if SharePoint can't read it).
+ */
+async function loadPageFiles() {
   const set = useBpmn.setState
+  const stored = pageFiles()
   const items = readJson<LiveItem[]>(MANIFEST_SELECTOR) ?? []
   const cfg = readJson<PageConfig>(`#${CONFIG_ID}`) ?? {}
   const results = liveResults() ?? {}
-  if (!items.length) {
-    set({ status: 'error', issues: [], linked: { ...cfg, count: 0 }, message: 'No BPMN files are linked to this page yet. Open Process Hub on your computer → Admin → Processes → “Prepare the SharePoint page”.' })
+  const idOf = (u: string) => u.match(/\/drives\/([^/]+)\/items\/([^/?#]+)/)?.slice(1).join('/') ?? u
+  const liveFor = (u?: string) => u ? results[u] ?? Object.entries(results).find(([k]) => idOf(k) === idOf(u))?.[1] : undefined
+
+  // one entry per file: stored copy and/or live link
+  const entries: { name: string; stored?: PageFile; spItemUrl?: string }[] = stored.map((f) => ({ name: f.name, stored: f, spItemUrl: f.spItemUrl }))
+  for (const it of items) if (!entries.some((e) => e.spItemUrl && idOf(e.spItemUrl) === idOf(it.spItemUrl))) entries.push({ name: it.label || it.fileName || 'BPMN file', spItemUrl: it.spItemUrl })
+  if (!entries.length) {
+    if (inSandbox) set({ status: 'error', issues: [], linked: { ...cfg, count: 0, live: 0 }, message: 'No BPMN files are in this page yet. Open process-hub.html on your computer → Admin → Processes → “Prepare the page”, choose the .bpmn files, and upload the page it saves.' })
+    else set({ status: 'off', issues: [], message: '' })
     return
   }
-  const idOf = (u: string) => u.match(/\/drives\/([^/]+)\/items\/([^/?#]+)/)?.slice(1).join('/') ?? u
+  set({ status: 'loading', message: '' })
   const issues: FileIssue[] = []
   const paths = new Set<string>()
-  for (const it of items) {
-    const name = it.label || it.fileName || 'BPMN file'
-    // keyed by the exact spItemUrl; match on the ids too in case SharePoint rewrote the address
-    const r = results[it.spItemUrl] ?? Object.entries(results).find(([k]) => idOf(k) === idOf(it.spItemUrl))?.[1]
-    if (!r) { issues.push({ file: name, reason: 'SharePoint did not hand this file to the page' }); continue }
-    if (r.error || typeof r.content !== 'string') { issues.push({ file: name, reason: (r.errorCode && LIVE_ERRORS[r.errorCode]) || r.error || 'no content' }); continue }
-    const path = `sp:${idOf(it.spItemUrl)}`
+  let live = 0
+  for (const e of entries) {
+    const r = liveFor(e.spItemUrl)
+    let text: string | undefined
+    if (r && !r.error && typeof r.content === 'string') { text = r.content; live++ }
+    else {
+      const why = r ? (r.errorCode && LIVE_ERRORS[r.errorCode]) || r.error || 'no content' : e.spItemUrl && Object.keys(results).length ? 'SharePoint did not hand this file to the page' : ''
+      if (e.stored) {
+        try { text = await unpackFile(e.stored) } catch (err) { issues.push({ file: e.name, reason: `the copy in the page couldn't be unpacked (${reason(err)})` }); continue }
+        if (why && inSandbox) issues.push({ file: e.name, reason: `showing the copy saved in the page — the SharePoint version couldn't be read: ${why}` })
+      } else { issues.push({ file: e.name, reason: why || 'not available outside SharePoint' }); continue }
+    }
+    const path = `page:${e.name.toLowerCase()}`
     try {
-      const out = bpmnToProcess(r.content, { file: name, path })
+      const out = bpmnToProcess(text, { file: e.name, path, modified: e.stored?.savedAt })
       const d = useData.getState()
       if (out.library.length) d.addLibraryItems(out.library)
       d.upsert(out.process)
       paths.add(path)
-    } catch (e) { issues.push({ file: name, reason: reason(e) }) }
+    } catch (err) { issues.push({ file: e.name, reason: reason(err) }) }
   }
-  // files no longer linked to the page
-  useData.getState().processes.filter((p) => p.source?.path?.startsWith('sp:') && !paths.has(p.source.path)).forEach((p) => useData.getState().remove(p.id))
+  // files no longer in the page
+  useData.getState().processes.filter((p) => /^(page|sp):/.test(p.source?.path ?? '') && !paths.has(p.source!.path!)).forEach((p) => useData.getState().remove(p.id))
   set({
-    status: 'ok', issues, lastSync: new Date().toISOString(), linked: { ...cfg, count: items.length },
+    status: 'ok', issues, lastSync: new Date().toISOString(), linked: { ...cfg, count: entries.length, live },
     message: `${paths.size} process${paths.size === 1 ? '' : 'es'} from Signavio`,
   })
 }
@@ -88,7 +108,7 @@ interface BpmnState {
   /** 'page': files linked into this SharePoint page; 'folder': a folder read through SharePoint's REST API */
   mode: 'page' | 'folder'
   /** for 'page': the folder the files were picked from, and when the page was prepared */
-  linked?: { folder?: string; preparedAt?: string; count: number }
+  linked?: { folder?: string; preparedAt?: string; count: number; live: number }
   status: 'off' | 'loading' | 'ok' | 'error'
   message: string
   issues: FileIssue[]
@@ -101,7 +121,7 @@ export const useBpmn = create<BpmnState>()(
     (set) => ({
       folderOverride: '',
       // inside SharePoint's page viewer (or wherever SharePoint handed over files) the linked files are used
-      mode: inSandbox || !!liveResults() ? 'page' : 'folder',
+      mode: inSandbox || !!liveResults() || pageFiles().length > 0 ? 'page' : 'folder',
       status: 'off',
       message: '',
       issues: [],
@@ -142,7 +162,7 @@ export const syncBpmn = () => (running ??= doSync().finally(() => { running = nu
 
 async function doSync() {
   const set = useBpmn.setState
-  if (useBpmn.getState().mode === 'page') { loadLiveData(); return }
+  if (useBpmn.getState().mode === 'page') { await loadPageFiles(); return }
   const raw = activeFolder()
   if (!raw) { set({ status: 'off', message: '', issues: [] }); return }
   const folder = parseFolderUrl(raw)
