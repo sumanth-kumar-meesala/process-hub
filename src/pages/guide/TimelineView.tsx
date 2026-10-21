@@ -120,7 +120,7 @@ function Row({ x, cur, done, hit, onPick }: { x: GuideStep; cur: boolean; done: 
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className={cn('text-[14.5px] leading-snug', cur ? 'font-extrabold' : x.mine ? 'font-semibold' : 'font-medium text-on-surface-variant', hit && 'rounded bg-[#FEF3C7] px-0.5')}>{x.st.label}</span>
           <span className="text-xs text-on-surface-variant">{agent && <Bot size={11} className="mr-0.5 inline align-[-1px]" aria-label="AI agent" />}{x.role?.name ?? '—'}{!x.onPath ? ' · only if a check says no' : ''}</span>
-          {x.isCheck && x.no && <span className="flex items-center gap-1 text-xs font-semibold text-tertiary">If no → {x.noBack ? 'back to ' : ''}{x.no.label}{x.no.stageId !== x.st.stageId ? ' (another stage)' : ''}</span>}
+          {x.isCheck && x.no && <span className="flex items-center gap-1 text-xs font-semibold text-tertiary">If {x.st.answers?.no ?? 'no'} → {x.noBack ? 'back to ' : ''}{x.no.label}{x.no.stageId !== x.st.stageId ? ' (another stage)' : ''}</span>}
           {x.thenBack && <span className="flex items-center gap-1 text-xs font-semibold text-tertiary"><Undo2 size={12} />Then back to {x.thenBack.label}</span>}
         </span>
       </button>

@@ -49,6 +49,8 @@ export interface Step {
   how?: string[]
   /** the linked resources a person must have for this step (the others are nice to have) */
   mustIds?: string[]
+  /** for a check whose answers aren't simply Yes / No (e.g. "NDIS" / "Non NDIS"): what each button says */
+  answers?: { yes: string; no: string }
 }
 
 export type ResourceCategory = 'form' | 'client-doc' | 'guide' | 'policy' | 'process'

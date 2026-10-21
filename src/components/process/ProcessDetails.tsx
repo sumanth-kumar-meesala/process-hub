@@ -7,6 +7,9 @@ import type { GuideRun, GuideStep } from '@/lib/guide'
 import { tint, type Process } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
+/** A check's answer, short enough for a button (the full text is in its tooltip). */
+const short = (t?: string) => (t && t.length > 42 ? `${t.slice(0, 40).trimEnd()}…` : t)
+
 /*
  * The stage and step details, shared by the 3D map's side panel and the Timeline,
  * so both views always show exactly the same information.
@@ -103,8 +106,8 @@ export function StepDetails({ proc, run, gs, compact = false }: { proc: Process;
 
       {gs.isCheck && (
         <div className={cn('grid gap-2', !compact && 'sm:grid-cols-2')}>
-          <div className="rounded-2xl bg-secondary-container/60 px-4 py-2.5"><b className="text-xs text-secondary">IF YES</b><p className="m-0 mt-0.5 text-sm">Carry on to “{gs.yes?.label ?? 'the end — all done'}”{otherStage(gs.yes)}</p></div>
-          <div className="rounded-2xl bg-tertiary-container px-4 py-2.5"><b className="text-xs text-tertiary">IF NO</b><p className="m-0 mt-0.5 text-sm">{gs.no ? `${gs.noBack ? 'Go back to' : 'Go to'} “${gs.no.label}”${otherStage(gs.no)}` : 'Ask the process owner'}</p></div>
+          <div className="rounded-2xl bg-secondary-container/60 px-4 py-2.5"><b className="text-xs uppercase text-secondary">If {gs.st.answers?.yes ?? 'yes'}</b><p className="m-0 mt-0.5 text-sm">Carry on to “{gs.yes?.label ?? 'the end — all done'}”{otherStage(gs.yes)}</p></div>
+          <div className="rounded-2xl bg-tertiary-container px-4 py-2.5"><b className="text-xs uppercase text-tertiary">If {gs.st.answers?.no ?? 'no'}</b><p className="m-0 mt-0.5 text-sm">{gs.no ? `${gs.noBack ? 'Go back to' : 'Go to'} “${gs.no.label}”${otherStage(gs.no)}` : 'Ask the process owner'}</p></div>
         </div>
       )}
       {gs.thenBack && <span className="flex items-center gap-1.5 text-[13px] font-semibold text-tertiary"><Undo2 size={13} />Then back to “{gs.thenBack.label}”{otherStage(gs.thenBack)}</span>}
@@ -138,8 +141,8 @@ export function StepDetails({ proc, run, gs, compact = false }: { proc: Process;
           <div className="flex-1" />
           {gs.isCheck ? (
             <>
-              <Button size={compact ? 'sm' : 'lg'} className="bg-tertiary hover:bg-[#9a3412]" onClick={() => run.go('no')}>No</Button>
-              <Button size={compact ? 'sm' : 'lg'} className="bg-secondary hover:bg-[#166534]" onClick={() => run.go('yes')}>Yes, carry on<ArrowRight size={16} /></Button>
+              <Button size={compact ? 'sm' : 'lg'} className="bg-tertiary hover:bg-[#9a3412]" title={gs.st.answers?.no} onClick={() => run.go('no')}>{short(gs.st.answers?.no) ?? 'No'}</Button>
+              <Button size={compact ? 'sm' : 'lg'} className="bg-secondary hover:bg-[#166534]" title={gs.st.answers?.yes} onClick={() => run.go('yes')}>{short(gs.st.answers?.yes) ?? 'Yes, carry on'}<ArrowRight size={16} /></Button>
             </>
           ) : <Button size={compact ? 'sm' : 'lg'} onClick={() => run.go()}>Done — next step<ArrowRight size={16} /></Button>}
         </div>

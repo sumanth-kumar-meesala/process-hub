@@ -37,16 +37,43 @@ export function nextStep(p: Process, id: string, answer?: 'yes' | 'no') {
 
 const stageOf = (p: Process, id?: string) => p.steps.find((s) => s.id === id)?.stageId
 
-/** The steps the work goes through when every check says "Yes" — the usual path, in order. */
+/**
+ * The steps the work goes through when every check says "Yes" — the usual path, in order.
+ * Where a step leads to several paths at once (parallel work, "any of these that apply"), each path is followed
+ * to its end before the next one; a process with several starting points goes through each of them in turn.
+ */
 export function usualPath(p: Process): Step[] {
-  const out: Step[] = [], seen = new Set<string>()
-  let id: string | undefined = firstStep(p)
-  while (id && !seen.has(id)) {
-    const st = p.steps.find((x) => x.id === id)
-    if (!st || !work(st)) break
-    seen.add(id); out.push(st)
-    id = nextStep(p, id, st.kind === 'decision' ? 'yes' : undefined)?.to
+  const byId = new Map(p.steps.map((s) => [s.id, s]))
+  const outs = (id: string) => p.edges.filter((e) => e.from === id)
+  const nexts = (st: Step): string[] => {
+    if (st.kind === 'decision') {
+      const yes = outs(st.id).filter((e) => /^yes$/i.test(e.label ?? '')).map((e) => e.to)
+      const y = yes.length ? yes : [nextStep(p, st.id, 'yes')?.to].filter((x): x is string => !!x)
+      if (!p.source) return y
+      // a diagram imported from Signavio: every answer's path is part of the walk-through — the "Yes" path first,
+      // then back for the others — so "Everyone" goes through each step
+      return [...y, ...outs(st.id).map((e) => e.to).filter((t) => !y.includes(t))]
+    }
+    const links = outs(st.id).filter((e) => !/^no$/i.test(e.label ?? ''))
+    // no link drawn (a draft made in the Builder): carry on with the next step in order
+    if (!outs(st.id).length && !p.source) { const n = nextStep(p, st.id); return n ? [n.to] : [] }
+    return links.map((e) => e.to)
   }
+  const out: Step[] = [], seen = new Set<string>()
+  const walkFrom = (first?: string) => {
+    const stack = first ? [first] : []
+    while (stack.length) {
+      const st = byId.get(stack.pop()!)
+      if (!st || !work(st) || seen.has(st.id)) continue
+      seen.add(st.id); out.push(st)
+      stack.push(...nexts(st).reverse())
+    }
+  }
+  walkFrom(firstStep(p))
+  // the other starting points ("it starts when…"), in order
+  p.steps.filter((s) => s.kind === 'start').forEach((s) => outs(s.id).forEach((e) => walkFrom(e.to)))
+  // in an imported diagram, steps nothing leads to (e.g. set off by a message from an outside party) start their own part
+  if (p.source) p.steps.filter((s) => work(s) && !seen.has(s.id)).forEach((s) => walkFrom(s.id))
   return out
 }
 

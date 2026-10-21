@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { LibraryItem, Process, Role, Stage, Step } from './types'
 import { firstStep, nextStep, usualPath, workSteps } from './walk'
+
+const isWork = (s?: Step) => !!s && (s.kind === 'step' || s.kind === 'decision')
 import { stepResources } from './resources'
 
 /**
@@ -29,6 +31,8 @@ export interface GuideStep {
   thenBack?: Step
   /** the next person, when the work changes hands after this step */
   handTo?: Role
+  /** when the next step isn't linked to this one: the walk moves on to another path or starting point */
+  jump?: string
   docs: GuideDoc[]
   mine: boolean
 }
@@ -45,21 +49,36 @@ export function buildGuide(p: Process, lib: LibraryItem[], roleId: string | null
   const byId = (id?: string) => p.steps.find((x) => x.id === id)
   const roleOf = (s?: Step) => p.roles.find((r) => r.id === s?.roleId)
 
+  // on the usual path, "next" is simply the next step on it — which also carries the walk on to the other
+  // parallel paths and the other starting points once one path has ended
+  const nextOnPath = new Map(usual.map((s, i) => [s.id, usual[i + 1]]))
+  const linked = (a: string, b: string) => p.edges.some((e) => e.from === a && e.to === b)
   const steps: GuideStep[] = work.map((st) => {
     const stageIdx = Math.max(0, p.stages.findIndex((s) => s.id === st.stageId))
     const isCheck = st.kind === 'decision'
-    const yesId = nextStep(p, st.id, isCheck ? 'yes' : undefined)?.to
+    const yesId = usualIds.has(st.id) ? nextOnPath.get(st.id)?.id : nextStep(p, st.id, isCheck ? 'yes' : undefined)?.to
     const yes = isEnd(p, yesId) ? undefined : byId(yesId)
     const noLink = isCheck ? p.edges.find((e) => e.from === st.id && /^no$/i.test(e.label ?? '')) : undefined
     const no = noLink && !isEnd(p, noLink.to) ? byId(noLink.to) : undefined
-    const thenBack = !isCheck && yes && order(yes.id) < order(st.id) ? yes : undefined
-    const handTo = yes && !thenBack && yes.roleId !== st.roleId ? roleOf(yes) : undefined
+    const direct = !!yes && linked(st.id, yes.id)
+    const thenBack = !isCheck && yes && direct && order(yes.id) < order(st.id) ? yes : undefined
+    const handTo = yes && direct && !thenBack && yes.roleId !== st.roleId ? roleOf(yes) : undefined
+    let jump: string | undefined
+    if (yes && !direct) {
+      const start = p.steps.find((s) => s.kind === 'start' && linked(s.id, yes.id))
+      const from = p.steps.find((s) => isWork(s) && s.id !== st.id && linked(s.id, yes.id))
+      const via = from && p.edges.find((e) => e.from === from.id && e.to === yes.id)
+      const answer = from?.kind === 'decision' && via ? (/^no$/i.test(via.label ?? '') ? from.answers?.no ?? 'No' : /^yes$/i.test(via.label ?? '') ? from.answers?.yes ?? 'Yes' : via.label) : undefined
+      jump = start ? `That path is done. Next starting point: “${start.label}”.`
+        : from && answer ? `That path is done. Now the “${answer}” path of “${from.label}”.`
+          : from ? `That path is done. Back to the other path after “${from.label}”.` : 'That path is done. Next, a separate part of the process.'
+    }
     const must = new Set(st.mustIds ?? [])
     const docs = stepResources(st, lib).map((it) => ({ it, must: must.has(it.id) })).sort((a, b) => Number(b.must) - Number(a.must))
     const i = usualMine.findIndex((x) => x.id === st.id)
     return {
       st, stage: p.stages[stageIdx], stageIdx, role: roleOf(st), isCheck, onPath: usualIds.has(st.id), n: i >= 0 ? i + 1 : null, local: null,
-      yes, no, noBack: !!no && order(no.id) < order(st.id), thenBack, handTo, docs, mine: mine(st),
+      yes, no, noBack: !!no && order(no.id) < order(st.id), thenBack, handTo, jump, docs, mine: mine(st),
     }
   })
   // number each stage's normal steps on the usual path 1, 2, 3… within the stage, shown as "stage.step"
@@ -114,7 +133,7 @@ export function useGuide(p: Process, lib: LibraryItem[]) {
     const names = [...new Set(passed.map((x) => x.role?.name ?? 'someone else'))]
     setS((x) => {
       const done = [...new Set([...x.done.filter((d) => answer !== 'no' || d !== nextId), cur.st.id, ...passed.map((q) => q.st.id)])]
-      const handoff = passed.length ? `Meanwhile ${names.join(', ')} ${names.length > 1 ? 'do' : 'does'} ${passed.length} step${passed.length > 1 ? 's' : ''}. Here's your next one.` : ''
+      const handoff = passed.length ? `Meanwhile ${names.join(', ')} ${names.length > 1 ? 'do' : 'does'} ${passed.length} step${passed.length > 1 ? 's' : ''}. Here's your next one.` : answer !== 'no' && cur.jump ? cur.jump : ''
       return id ? { ...x, done, cur: id, hist: [...x.hist, cur.st.id], finished: false, handoff } : { ...x, done, hist: [...x.hist, cur.st.id], finished: true, handoff: '' }
     })
   }

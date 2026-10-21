@@ -36,7 +36,8 @@ export interface BpmnResult {
 const TASKS = new Set(['task', 'userTask', 'manualTask', 'serviceTask', 'scriptTask', 'sendTask', 'receiveTask', 'businessRuleTask', 'callActivity'])
 const SUBS = new Set(['subProcess', 'adHocSubProcess', 'transaction'])
 const GATEWAYS = new Set(['exclusiveGateway', 'inclusiveGateway', 'parallelGateway', 'eventBasedGateway', 'complexGateway'])
-const CHOICE_GATEWAYS = new Set(['exclusiveGateway', 'inclusiveGateway', 'eventBasedGateway', 'complexGateway'])
+// a choice of one path; an inclusive gateway ("any of these that apply") is walked like parallel work
+const CHOICE_GATEWAYS = new Set(['exclusiveGateway', 'eventBasedGateway', 'complexGateway'])
 const MID_EVENTS = new Set(['intermediateCatchEvent', 'intermediateThrowEvent'])
 
 type Kind = 'step' | 'decision' | 'start' | 'end' | 'pass'
@@ -332,21 +333,40 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
     else if (endId) { nodes.delete(endId); links = links.filter((l) => l.to !== endId && l.from !== endId) }
   }
 
-  // ---------- checks: plain Yes / No paths ----------
+  // ---------- checks: Yes / No paths, keeping the answers' own names ----------
+  const answersOf = new Map<string, { yes: string; no: string }>()
+  const negative = (t: string) => NEG.test(t) || /\b(not|no|without|n't)\b/i.test(t)
+  const plain = (t?: string) => !t || /^(yes|y|no|n|ja|nein|si|oui|non|ok|okay|true|false)$/i.test(t)
+  // a plain Yes / No check without a name is usually the result of the step before it:
+  // "Check if SA in place and SDRs generated" → "SA in place and SDRs generated?"
+  const askAbout = (id: string) => {
+    const before = links.filter((l) => l.to === id).map((l) => nodes.get(l.from)).find((x) => x && x.kind === 'step')?.name
+    if (!before) return 'Which way?'
+    const q = before.replace(/^(check|confirm|verify|determine|review|see|find out)\s+(if|whether|that)?\s*/i, '').replace(/[.?]$/, '')
+    return q !== before ? `${q.replace(/^./, (c) => c.toUpperCase())}?` : `${before}: yes or no?`
+  }
   for (const n of nodes.values()) {
     if (n.kind !== 'decision') continue
-    const outs = links.filter((l) => l.from === n.id && l.prio === 0)
-    const no = outs.find((l) => NEG.test(l.label ?? ''))
-    const yes = outs.filter((l) => l !== no && POS.test(l.label ?? ''))
+    // a check's links, grouped by answer (one answer can lead to several steps at once)
+    const byAnswer = new Map<string, Link[]>()
+    links.filter((l) => l.from === n.id && l.prio === 0).forEach((l) => { const k = l.label ?? ''; byAnswer.set(k, [...(byAnswer.get(k) ?? []), l]) })
+    const keys = [...byAnswer.keys()]
+    // which answer is "Yes" (the usual way on): a positive one, else not the negative one, else the unnamed (default) path, else the first
+    let no = keys.find((k) => k && negative(k))
+    const yes = keys.find((k) => k !== no && POS.test(k)) ?? keys.find((k) => k !== no && !k) ?? keys.find((k) => k !== no)
+    if (no === undefined) no = keys.find((k) => k !== yes)
+    if (yes !== undefined && no !== undefined && !(plain(yes) && plain(no))) answersOf.set(n.id, { yes: yes || 'Otherwise', no: no || 'Otherwise' })
     if (!n.name) {
-      // an unnamed check: name it from its paths, e.g. "Approved?" or "Standard or urgent?"
-      const named = outs.map((l) => l.label).filter(Boolean) as string[]
-      const word = yes[0]?.label && !/^(yes|y|ja|si|oui|ok|okay|true)$/i.test(yes[0].label) ? yes[0].label : ''
-      n.name = word && no ? `${word.replace(/^./, (c) => c.toUpperCase())}?` : named.length >= 2 ? `${named.join(' or ')}?` : 'Which way?'
+      // an unnamed check: "Staff upskill required?" for a pair like "Staff upskill required" / "No staff upskill required",
+      // else "NDIS or Non NDIS?"
+      const strip = (t: string) => t.toLowerCase().replace(/\b(no|not|non)\b[\s-]*/g, '').replace(/\s+/g, ' ').trim()
+      n.name = yes && no && strip(yes) === strip(no) ? `${yes.replace(/^./, (c) => c.toUpperCase())}?`
+        : yes && no && !(plain(yes) && plain(no)) ? `${yes} or ${no}?`
+          : yes && !plain(yes) ? `${yes}?`
+            : no && !plain(no) ? `${no}?` : askAbout(n.id)
     }
-    if (no) no.label = 'No'
-    yes.forEach((l) => { l.label = 'Yes' })
-    if (no && !yes.length) { const other = outs.filter((l) => l !== no); if (other.length === 1) other[0].label = 'Yes' }
+    if (yes !== undefined) byAnswer.get(yes)!.forEach((l) => { l.label = 'Yes' })
+    if (no !== undefined) byAnswer.get(no)!.forEach((l) => { l.label = 'No' })
   }
 
   // ---------- reading order: follow the usual path from the start, then by position ----------
@@ -505,6 +525,7 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
     const si = stageOf.get(n.id) ?? (n.kind === 'end' ? (preds.length ? Math.max(...preds) : stageCount - 1) : n.kind === 'start' ? (succs.length ? Math.min(...succs) : 0) : 0)
     const label = n.name || (n.kind === 'start' ? 'Start' : n.kind === 'end' ? 'Finish' : n.kind === 'decision' ? 'Which way?' : 'Untitled step')
     const step: Step = { id: n.id, kind: n.kind as Step['kind'], label, roleId: n.roleId, stageId: `st${si + 1}` }
+    if (answersOf.has(n.id)) step.answers = answersOf.get(n.id)
     if (n.kind === 'step' || n.kind === 'decision') {
       const text = docText(n.el)
       const lines = text.split(/\r?\n/).map((l) => l.replace(/^\s*([-*•·]|\d+[.)])\s*/, '').trim()).filter(Boolean)
