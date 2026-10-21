@@ -8,12 +8,27 @@ import { SEED_SYSTEMS, type InternalSystem } from '@/data/systems'
 import { autoAssign } from '@/lib/resources'
 import { fixStageNames } from '@/lib/derive'
 import type { LibraryItem, Persona, Process } from '@/lib/types'
+import { inSandbox, localOrMemory } from '@/lib/sandbox'
 
-/** IndexedDB-backed storage: the app's own small database, kept in the browser. */
+/**
+ * IndexedDB-backed storage: the app's own small database, kept in the browser.
+ * Where the browser doesn't allow it (SharePoint's HTML-page viewer, some private windows) the data is kept in memory.
+ */
+const memory = new Map<string, string>()
+let idbOk = !inSandbox
 const idbStorage: StateStorage = {
-  getItem: async (name) => (await get(name)) ?? null,
-  setItem: async (name, value) => { await set(name, value) },
-  removeItem: async (name) => { await del(name) },
+  getItem: async (name) => {
+    if (idbOk) { try { return (await get<string>(name)) ?? null } catch { idbOk = false } }
+    return memory.get(name) ?? null
+  },
+  setItem: async (name, value) => {
+    if (idbOk) { try { await set(name, value); return } catch { idbOk = false } }
+    memory.set(name, value)
+  },
+  removeItem: async (name) => {
+    if (idbOk) { try { await del(name); return } catch { idbOk = false } }
+    memory.delete(name)
+  },
 }
 
 export interface Person { id: string; name: string; note: string; persona: Persona }
@@ -164,7 +179,7 @@ export const useSession = create<SessionState>()(
       setMyRole: (myRole) => setS({ myRole }),
       setGroq: (groqKey, model) => setS({ groqKey, model }),
     }),
-    { name: 'process-hub-session' },
+    { name: 'process-hub-session', storage: createJSONStorage(localOrMemory) },
   ),
 )
 

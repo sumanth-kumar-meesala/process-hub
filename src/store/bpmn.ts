@@ -1,15 +1,83 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
 import { bpmnToProcess } from '@/lib/bpmn'
 import { listBpmnFiles, onSharePoint, parseFolderUrl, readSpFile, SpError } from '@/lib/sharepoint'
 import { useData } from './store'
+import { inSandbox, localOrMemory } from '@/lib/sandbox'
+
+// ---------- SharePoint HTML pages: files linked into the page ("live data") ----------
+
+/** One file in the page's live-data list, as SharePoint expects it. */
+export interface LiveItem { spItemUrl: string; label?: string; fileName?: string }
+interface LiveResult { format?: string; content?: string; error?: string; errorCode?: string; metadata?: { fileName?: string } }
+/** Written next to the live-data list by "Prepare the SharePoint page", to show where the files came from. */
+export interface PageConfig { folder?: string; preparedAt?: string }
+
+const readJson = <T,>(selector: string): T | undefined => {
+  const el = document.querySelector(selector)
+  if (!el?.textContent?.trim()) return undefined
+  try { return JSON.parse(el.textContent) as T } catch { return undefined }
+}
+export const MANIFEST_SELECTOR = 'script.ka-livedata-manifest'
+export const CONFIG_ID = 'process-hub-config'
+const liveResults = () => (window as unknown as { __LD_RESULTS__?: Record<string, LiveResult> }).__LD_RESULTS__
+/** What "Prepare the SharePoint page" wrote into this copy of the page, if anything. */
+export const pageSetup = () => ({ items: readJson<LiveItem[]>(MANIFEST_SELECTOR) ?? [], config: readJson<PageConfig>(`#${CONFIG_ID}`) ?? {} })
+
+const LIVE_ERRORS: Record<string, string> = {
+  'access-denied': "you don't have access to this file", 'not-found': 'the file was not found (moved or deleted?)',
+  protected: 'the file is protected (sensitivity label)', 'fetch-failed': 'SharePoint could not read the file',
+  'decode-failed': "the file couldn't be read as text", 'parse-failed': "the file couldn't be read", 'invalid-request': 'the link to the file is not valid',
+}
+
+function loadLiveData() {
+  const set = useBpmn.setState
+  const items = readJson<LiveItem[]>(MANIFEST_SELECTOR) ?? []
+  const cfg = readJson<PageConfig>(`#${CONFIG_ID}`) ?? {}
+  const results = liveResults() ?? {}
+  if (!items.length) {
+    set({ status: 'error', issues: [], linked: { ...cfg, count: 0 }, message: 'No BPMN files are linked to this page yet. Open Process Hub on your computer → Admin → Processes → “Prepare the SharePoint page”.' })
+    return
+  }
+  const idOf = (u: string) => u.match(/\/drives\/([^/]+)\/items\/([^/?#]+)/)?.slice(1).join('/') ?? u
+  const issues: FileIssue[] = []
+  const paths = new Set<string>()
+  for (const it of items) {
+    const name = it.label || it.fileName || 'BPMN file'
+    // keyed by the exact spItemUrl; match on the ids too in case SharePoint rewrote the address
+    const r = results[it.spItemUrl] ?? Object.entries(results).find(([k]) => idOf(k) === idOf(it.spItemUrl))?.[1]
+    if (!r) { issues.push({ file: name, reason: 'SharePoint did not hand this file to the page' }); continue }
+    if (r.error || typeof r.content !== 'string') { issues.push({ file: name, reason: (r.errorCode && LIVE_ERRORS[r.errorCode]) || r.error || 'no content' }); continue }
+    const path = `sp:${idOf(it.spItemUrl)}`
+    try {
+      const out = bpmnToProcess(r.content, { file: name, path })
+      const d = useData.getState()
+      if (out.library.length) d.addLibraryItems(out.library)
+      d.upsert(out.process)
+      paths.add(path)
+    } catch (e) { issues.push({ file: name, reason: reason(e) }) }
+  }
+  // files no longer linked to the page
+  useData.getState().processes.filter((p) => p.source?.path?.startsWith('sp:') && !paths.has(p.source.path)).forEach((p) => useData.getState().remove(p.id))
+  set({
+    status: 'ok', issues, lastSync: new Date().toISOString(), linked: { ...cfg, count: items.length },
+    message: `${paths.size} process${paths.size === 1 ? '' : 'es'} from Signavio`,
+  })
+}
+
+/** In a SharePoint HTML page, asks SharePoint to read the linked files again (it reloads the page). */
+export const refreshLiveData = () => { try { window.parent.postMessage({ type: 'ka-html-viewer-refresh' }, '*') } catch { /* not in SharePoint */ } }
 
 /**
- * Keeps the processes in sync with the Signavio BPMN files in a SharePoint folder.
+ * Keeps the processes in sync with the Signavio BPMN files in SharePoint. Two ways:
  *
- * Which folder: the one chosen in the app ("Change folder", saved in this browser)
- * → else the folder that process-hub.html itself is in (and its sub-folders).
- * Only files that changed since last time are downloaded again; processes whose file was removed are removed.
+ * 1. As a SharePoint HTML page (Site Pages): the page can't read folders itself. The files are linked into the page
+ *    beforehand (Admin → "Prepare the SharePoint page" writes a "live data" list into process-hub.html), and SharePoint
+ *    reads them with the viewer's own sign-in and hands them to the page in window.__LD_RESULTS__ before it starts.
+ *
+ * 2. On a SharePoint site that allows scripts in libraries (same origin): the app reads a folder through SharePoint's
+ *    REST API — the folder chosen in the app ("Change folder", saved in this browser), else the page's own folder.
+ *    Only files that changed since last time are downloaded again; processes whose file was removed are removed.
  */
 
 export interface FileIssue { file: string; reason: string }
@@ -17,6 +85,10 @@ export interface FileIssue { file: string; reason: string }
 interface BpmnState {
   /** folder chosen in the app, kept in this browser only ('' = the page's own folder) */
   folderOverride: string
+  /** 'page': files linked into this SharePoint page; 'folder': a folder read through SharePoint's REST API */
+  mode: 'page' | 'folder'
+  /** for 'page': the folder the files were picked from, and when the page was prepared */
+  linked?: { folder?: string; preparedAt?: string; count: number }
   status: 'off' | 'loading' | 'ok' | 'error'
   message: string
   issues: FileIssue[]
@@ -28,12 +100,14 @@ export const useBpmn = create<BpmnState>()(
   persist(
     (set) => ({
       folderOverride: '',
+      // inside SharePoint's page viewer (or wherever SharePoint handed over files) the linked files are used
+      mode: inSandbox || !!liveResults() ? 'page' : 'folder',
       status: 'off',
       message: '',
       issues: [],
       setFolderOverride: (folderOverride) => set({ folderOverride: folderOverride.trim() }),
     }),
-    { name: 'process-hub-bpmn', partialize: (s) => ({ folderOverride: s.folderOverride }) },
+    { name: 'process-hub-bpmn', storage: createJSONStorage(localOrMemory), partialize: (s) => ({ folderOverride: s.folderOverride }) },
   ),
 )
 
@@ -68,6 +142,7 @@ export const syncBpmn = () => (running ??= doSync().finally(() => { running = nu
 
 async function doSync() {
   const set = useBpmn.setState
+  if (useBpmn.getState().mode === 'page') { loadLiveData(); return }
   const raw = activeFolder()
   if (!raw) { set({ status: 'off', message: '', issues: [] }); return }
   const folder = parseFolderUrl(raw)

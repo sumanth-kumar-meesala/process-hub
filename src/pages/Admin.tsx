@@ -15,6 +15,8 @@ import { SITE_KEY, useAiKey } from '@/ai/config'
 import { importBpmnFiles } from '@/store/bpmn'
 import { onSharePoint } from '@/lib/sharepoint'
 import { BpmnFolderPicker, BpmnStatus } from '@/components/BpmnStatus'
+import { PreparePage } from '@/components/PreparePage'
+import { inSandbox } from '@/lib/sandbox'
 
 const MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
 type Tab = 'ai' | 'people' | 'processes' | 'library' | 'systems' | 'glossary'
@@ -192,23 +194,44 @@ function Signavio() {
   const onFiles = async (list: FileList | null) => {
     if (!list?.length) return
     const { ok, issues } = await importBpmnFiles([...list])
-    setNote([ok ? `Added ${ok} process${ok === 1 ? '' : 'es'} from your files (saved in this browser only).` : '', ...issues.map((x) => `${x.file}: ${x.reason}`)].filter(Boolean).join(' '))
+    setNote([ok ? `Added ${ok} process${ok === 1 ? '' : 'es'} from your files (kept in this browser only).` : '', ...issues.map((x) => `${x.file}: ${x.reason}`)].filter(Boolean).join(' '))
     if (pick.current) pick.current.value = ''
   }
   return (
-    <div className="flex flex-col gap-3 rounded-[20px] bg-surface-low p-5">
+    <div className="flex flex-col gap-4 rounded-[20px] bg-surface-low p-5">
       <h2 className="m-0 flex items-center gap-2 text-lg font-extrabold"><FolderOpen size={20} aria-hidden />Signavio processes (BPMN)</h2>
-      <p className="m-0 text-[13px] text-on-surface-variant">
-        Export the models from Signavio as BPMN 2.0 (.bpmn) into a SharePoint folder. Process Hub reads that folder each time it opens, with each viewer's own SharePoint sign-in, and only shows what they can open. Change a process in Signavio and export it again to update it here.
-        {!onSharePoint() && ' Reading a folder only works when the app itself is opened from SharePoint.'}
-      </p>
-      <BpmnFolderPicker />
-      <BpmnStatus canChange={false} />
-      <div>
-        <input ref={pick} type="file" multiple accept=".bpmn,.bpmn2,.xml" className="hidden" onChange={(e) => onFiles(e.target.files)} />
-        <Button variant="tonal" size="sm" onClick={() => pick.current?.click()}><FileUp size={16} />Open .bpmn files from this computer…</Button>
-      </div>
-      {note && <p className="m-0 text-sm font-semibold text-secondary">{note}</p>}
+      {inSandbox ? (
+        <>
+          <p className="m-0 text-[13px] text-on-surface-variant">This is the SharePoint page. It shows the BPMN files that were linked into it when it was prepared; SharePoint reads them with each viewer's own sign-in. Files changed in Signavio and exported again under the same name update by themselves.</p>
+          <BpmnStatus />
+          <p className="m-0 text-[13px] text-on-surface-variant">To link a different folder or add files, open <b>process-hub.html</b> on your computer (double-click it), come back here and use <b>Prepare the SharePoint page</b>, then upload the page it makes in place of this one.</p>
+        </>
+      ) : (
+        <>
+          <div className="flex flex-col gap-1">
+            <h3 className="m-0 text-base font-extrabold">Prepare the SharePoint page</h3>
+            <p className="m-0 text-[13px] text-on-surface-variant">
+              Export the models from Signavio as BPMN 2.0 (.bpmn) into one SharePoint folder. Then link that folder's files into process-hub.html here, and upload the result to the site's Site Pages. Everyone who opens the page sees the processes, read with their own SharePoint sign-in — no admin needed.
+            </p>
+          </div>
+          <PreparePage />
+          <div className="flex flex-col gap-2 border-t border-outline-variant pt-4">
+            <h3 className="m-0 text-base font-extrabold">Try files from this computer</h3>
+            <p className="m-0 text-[13px] text-on-surface-variant">Opens .bpmn files here, to see how they look as processes. Kept in this browser only.</p>
+            <div>
+              <input ref={pick} type="file" multiple accept=".bpmn,.bpmn2,.xml" className="hidden" onChange={(e) => onFiles(e.target.files)} />
+              <Button variant="tonal" size="sm" onClick={() => pick.current?.click()}><FileUp size={16} />Open .bpmn files…</Button>
+            </div>
+            {note && <p className="m-0 text-sm font-semibold text-secondary">{note}</p>}
+          </div>
+          {onSharePoint() && (
+            <details className="border-t border-outline-variant pt-4 text-[13px]">
+              <summary className="cursor-pointer font-bold">Read a folder directly (SharePoint sites that allow scripts in libraries)</summary>
+              <div className="mt-3 flex flex-col gap-3"><BpmnFolderPicker /><BpmnStatus canChange={false} /></div>
+            </details>
+          )}
+        </>
+      )}
     </div>
   )
 }

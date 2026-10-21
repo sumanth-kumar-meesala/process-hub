@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, FileWarning, FolderOpen, Loader2, RefreshCw, Workflow } from 'lucide-react'
+import { AlertTriangle, FileWarning, FolderOpen, HelpCircle, Loader2, RefreshCw, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { activeFolder, folderLabel, pageFolder, syncBpmn, useBpmn } from '@/store/bpmn'
+import { activeFolder, folderLabel, pageFolder, refreshLiveData, syncBpmn, useBpmn } from '@/store/bpmn'
 import { parseFolderUrl } from '@/lib/sharepoint'
 import { useData } from '@/store/store'
 
@@ -57,12 +57,13 @@ export function BpmnFolderPicker({ onDone }: { onDone?: () => void }) {
 
 /** One line under the search: which folder the Signavio processes come from, and whether loading them worked. */
 export function BpmnStatus({ canChange = true }: { canChange?: boolean }) {
-  const { status, message, issues, lastSync, folderOverride } = useBpmn()
+  const { status, message, issues, lastSync, folderOverride, mode } = useBpmn()
   const [open, setOpen] = useState(false)
   const [picking, setPicking] = useState(false)
   const [, tick] = useState(0)
   useEffect(() => { const t = setInterval(() => tick((n) => n + 1), 30_000); return () => clearInterval(t) }, [])
   if (status === 'off' && !picking) return null
+  if (mode === 'page') return <PageStatus />
   const folder = activeFolder()
   const link = 'inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[13px] font-bold text-primary disabled:cursor-default disabled:opacity-50'
   return (
@@ -90,6 +91,47 @@ export function BpmnStatus({ canChange = true }: { canChange?: boolean }) {
         </ul>
       )}
       {picking && <div className="border-t border-surface-mid pt-3"><BpmnFolderPicker onDone={() => setPicking(false)} /></div>}
+    </div>
+  )
+}
+
+/** In a SharePoint HTML page: the files linked into the page, and how to change them. */
+function PageStatus() {
+  const { status, message, issues, linked } = useBpmn()
+  const [open, setOpen] = useState(false)
+  const [help, setHelp] = useState(status === 'error')
+  const link = 'inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[13px] font-bold text-primary'
+  const when = linked?.preparedAt ? new Date(linked.preparedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : ''
+  return (
+    <div role="status" className="flex flex-col gap-1.5 rounded-2xl bg-white px-4 py-2.5 text-[13px] text-on-surface-variant">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {linked?.folder && (
+          <span className="inline-flex items-center gap-1.5" title={linked.folder}>
+            <FolderOpen size={14} aria-hidden /><b className="text-on-surface">{folderLabel(linked.folder)}</b>{when && ` · files linked ${when}`}
+          </span>
+        )}
+        {status === 'ok' && <span className="inline-flex items-center gap-1.5"><Workflow size={14} className="text-primary" aria-hidden />{message}</span>}
+        {status === 'error' && <span className="inline-flex items-center gap-1.5 text-error"><AlertTriangle size={14} aria-hidden />{message}</span>}
+        {status === 'ok' && <button onClick={refreshLiveData} className={link} title="SharePoint reads the files again and reloads the page"><RefreshCw size={13} aria-hidden />Refresh</button>}
+        <button onClick={() => setHelp(!help)} className={link}><HelpCircle size={13} aria-hidden />Add or remove files</button>
+        {issues.length > 0 && (
+          <button onClick={() => setOpen(!open)} className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[13px] font-bold text-[#9A4A00]">
+            <FileWarning size={13} aria-hidden />{issues.length} file{issues.length === 1 ? '' : 's'} couldn't be read
+          </button>
+        )}
+      </div>
+      {open && issues.length > 0 && (
+        <ul className="m-0 pl-5">
+          {issues.map((x) => <li key={x.file}><b>{x.file}</b>: {x.reason}</li>)}
+        </ul>
+      )}
+      {help && (
+        <div className="border-t border-surface-mid pt-2 leading-relaxed">
+          A SharePoint page can't look inside a folder by itself, so the BPMN files are linked into the page when it's prepared.
+          A file that's changed in Signavio and exported again under the same name shows the new version here automatically.
+          To add or remove files: open <b>process-hub.html</b> on your computer, go to <b>Admin → Processes → Prepare the SharePoint page</b>, choose the folder, and upload the page it makes in place of this one (up to {32} files per page).
+        </div>
+      )}
     </div>
   )
 }

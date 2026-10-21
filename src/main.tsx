@@ -1,6 +1,13 @@
 import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter, Route, Routes } from 'react-router-dom'
+import { SandboxRouter } from '@/components/SandboxRouter'
+import { inSandbox } from '@/lib/sandbox'
+import '@fontsource/figtree/latin-400.css'
+import '@fontsource/figtree/latin-500.css'
+import '@fontsource/figtree/latin-600.css'
+import '@fontsource/figtree/latin-700.css'
+import '@fontsource/figtree/latin-800.css'
 import './index.css'
 import Discover from '@/pages/Discover'
 import { BpmnSync } from '@/components/BpmnStatus'
@@ -11,12 +18,15 @@ const Builder = lazy(() => import('@/pages/Builder'))
 const Admin = lazy(() => import('@/pages/Admin'))
 const GuidePage = lazy(() => import('@/pages/GuidePage'))
 
+// SharePoint's HTML-page viewer doesn't allow history.pushState, which HashRouter uses
+const Router = inSandbox ? SandboxRouter : HashRouter
+
 const Loading = () => <div className="p-10 text-on-surface-variant">Loading…</div>
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BpmnSync />
-    <HashRouter>
+    <Router>
       <Suspense fallback={<Loading />}>
         <Routes>
           <Route path="/" element={<Discover />} />
@@ -32,6 +42,6 @@ createRoot(document.getElementById('root')!).render(
           <Route path="*" element={<Discover />} />
         </Routes>
       </Suspense>
-    </HashRouter>
+    </Router>
   </StrictMode>,
 )

@@ -53,15 +53,23 @@ npm run build      # production build in dist/
 
 ## Publish on SharePoint (with Signavio BPMN processes)
 
-No admin rights, app registration or server are needed: the app is one HTML file, and it reads the Signavio files with each viewer's own SharePoint sign-in.
+No admin rights, app registration or server are needed. The app is one HTML file that runs as a SharePoint **HTML page** (Site Pages).
 
-1. `npm run build:sharepoint` — makes **`dist-sharepoint/process-hub.html`**, one self-contained file (all JavaScript, styles and the icon inside).
-2. In SharePoint, upload `process-hub.html` to a folder (e.g. *Shared Documents/Process Hub*) and put the Signavio exports in the same folder (*Signavio → Export → BPMN 2.0 XML*, `.bpmn`). Sub-folders are read too and become areas in the app.
-3. Open `process-hub.html` from SharePoint. The processes appear with a **Signavio** tag; a line above the list shows which folder is read, how many processes were loaded, or what went wrong.
+SharePoint shows such a page in a locked-down frame: it can't read folders, make network requests or use browser storage. Instead, the page names up to **32 files** in a "live data" list, and SharePoint reads those files with each viewer's own sign-in and hands them to the page. So the BPMN files are *linked into the page* before it's uploaded:
 
-**Choosing another folder:** by default the app reads the folder it is in. To read a different one, click **Change folder** on that line (or go to **Admin → Processes**) and paste the folder's address from the browser bar, or type the name of a folder next to the page (e.g. `BPMN`). **Use this page's folder** goes back to the default. The choice is saved in that browser.
+1. `npm run build:sharepoint` — makes **`dist-sharepoint/process-hub.html`**, one self-contained file (all JavaScript, styles, fonts and the icon inside). The build checks that the inline script is intact.
+2. Export the Signavio models as BPMN 2.0 (`.bpmn`) into one SharePoint folder.
+3. Open `process-hub.html` on your computer (double-click it) → **I am: Global Admin** → **Admin → Processes → Prepare the SharePoint page**:
+   1. paste the folder's address (from the browser bar, or "Copy link"),
+   2. open the link it shows — a SharePoint page listing the folder's files as text, with your own sign-in — select all, copy, and paste it back,
+   3. choose `process-hub.html`; a copy with the files linked is saved to your Downloads.
+4. Upload that file to the site's **Site Pages** library (replacing the old one) and open it.
 
-`setup/sharepoint-bpmn-test.html` is a small test page: upload it where `process-hub.html` will go and open it. It checks that scripts run there and that it can read the folder.
+Files that are changed in Signavio and exported again **under the same name** show the new version by themselves (SharePoint reads them each time the page opens; **Refresh** on the page reads them again). To **add or remove** files, do step 3 again and upload the new page.
+
+On the page, a line above the list shows the linked folder, how many processes were loaded, and any file that couldn't be read (for example when a viewer has no access to it). Inside SharePoint nothing is saved between visits (no browser storage there), and the AI assistant can't reach Groq.
+
+*Other places:* on a site that allows scripts in document libraries, the page can instead read a folder directly through SharePoint's REST API (Admin → Processes → "Read a folder directly"; `setup/sharepoint-bpmn-test.html` checks that). Opened anywhere else, **Open .bpmn files…** in Admin shows files from your computer.
 
 **How a BPMN diagram becomes a process** (`src/lib/bpmn.ts`)
 
