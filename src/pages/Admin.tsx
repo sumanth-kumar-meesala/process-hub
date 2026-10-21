@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Download, Plus, RotateCcw, Sparkles, Trash2, Upload } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Download, FileUp, FolderOpen, Plus, RotateCcw, Sparkles, Trash2, Upload } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm'
@@ -12,13 +12,17 @@ import { displayName } from '@/lib/derive'
 import { INPUT_BUDGET, KEEP_MESSAGES, testGroq } from '@/ai/groq'
 import { cn } from '@/lib/utils'
 import { SITE_KEY, useAiKey } from '@/ai/config'
+import { importBpmnFiles } from '@/store/bpmn'
+import { onSharePoint } from '@/lib/sharepoint'
+import { BpmnFolderPicker, BpmnStatus } from '@/components/BpmnStatus'
 
 const MODELS = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant']
 type Tab = 'ai' | 'people' | 'processes' | 'library' | 'systems' | 'glossary'
 
 export default function Admin() {
   const { persona } = useSession()
-  const [tab, setTab] = useState<Tab>('ai')
+  const [params] = useSearchParams()
+  const [tab, setTab] = useState<Tab>((params.get('tab') as Tab) || 'ai')
   if (persona !== 'admin') return (
     <div><AppHeader /><div className="mx-auto max-w-[640px] p-10"><Card className="p-8">
       <h1 className="m-0 mb-2 text-2xl font-extrabold">Admin is for the Global Admin</h1>
@@ -163,12 +167,13 @@ function Processes() {
         <Button variant="tonal" onClick={exportAll}><Download size={16} />Export all</Button>
         <Button asChild><Link to="/builder" className="no-underline"><Plus size={16} />New process</Link></Button>
       </div>
+      <Signavio />
       <p className="m-0 text-[13px] text-on-surface-variant">The five starter processes come with the app. Changes and new processes are saved in this browser — export them and add the file to the repo (src/data) to share them with everyone.</p>
       {note && <p className="m-0 text-sm font-semibold text-secondary">{note}</p>}
       <div>
         {processes.map((p) => (
           <div key={p.id} className="flex items-center gap-3.5 border-b border-surface-mid px-1 py-3 last:border-0">
-            <div className="flex-1"><Link to={`/process/${p.id}`} className="font-bold text-on-surface no-underline">{displayName(p)}</Link><div className="text-[13px] text-on-surface-variant">{p.owner} · {p.area}{p.needsCompleting ? ' · being completed' : ''}</div></div>
+            <div className="flex-1"><Link to={`/process/${p.id}`} className="font-bold text-on-surface no-underline">{displayName(p)}</Link><div className="text-[13px] text-on-surface-variant">{p.owner} · {p.area}{p.needsCompleting ? ' · being completed' : ''}{p.source?.kind === 'bpmn' ? ` · from ${p.source.path?.startsWith('/') ? 'SharePoint' : 'a file'}: ${p.source.file}` : ''}</div></div>
             <span className={cn('text-xs font-bold', p.status === 'published' ? 'text-secondary' : 'text-on-surface-variant')}>{p.status === 'published' ? 'Published' : 'Draft'}</span>
             <Button variant="text" size="sm" asChild><Link to={`/builder/${p.id}`}>Edit</Link></Button>
             <ConfirmButton iconOnly label={`Delete ${p.title}`} question="Delete?" confirmLabel="Delete" icon={<Trash2 size={16} />} onConfirm={() => remove(p.id)} />
@@ -177,6 +182,34 @@ function Processes() {
       </div>
       <div className="self-start"><ConfirmButton label="Reset to starter processes" question="Replace everything with the five starter processes?" confirmLabel="Reset" icon={<RotateCcw size={16} />} onConfirm={() => { resetToStarter(); setNote('Back to the five starter processes.') }} /></div>
     </Card>
+  )
+}
+
+/** Where the Signavio BPMN files come from: a SharePoint folder (for everyone) or files picked from this computer. */
+function Signavio() {
+  const [note, setNote] = useState('')
+  const pick = useRef<HTMLInputElement>(null)
+  const onFiles = async (list: FileList | null) => {
+    if (!list?.length) return
+    const { ok, issues } = await importBpmnFiles([...list])
+    setNote([ok ? `Added ${ok} process${ok === 1 ? '' : 'es'} from your files (saved in this browser only).` : '', ...issues.map((x) => `${x.file}: ${x.reason}`)].filter(Boolean).join(' '))
+    if (pick.current) pick.current.value = ''
+  }
+  return (
+    <div className="flex flex-col gap-3 rounded-[20px] bg-surface-low p-5">
+      <h2 className="m-0 flex items-center gap-2 text-lg font-extrabold"><FolderOpen size={20} aria-hidden />Signavio processes (BPMN)</h2>
+      <p className="m-0 text-[13px] text-on-surface-variant">
+        Export the models from Signavio as BPMN 2.0 (.bpmn) into a SharePoint folder. Process Hub reads that folder each time it opens, with each viewer's own SharePoint sign-in, and only shows what they can open. Change a process in Signavio and export it again to update it here.
+        {!onSharePoint() && ' Reading a folder only works when the app itself is opened from SharePoint.'}
+      </p>
+      <BpmnFolderPicker />
+      <BpmnStatus canChange={false} />
+      <div>
+        <input ref={pick} type="file" multiple accept=".bpmn,.bpmn2,.xml" className="hidden" onChange={(e) => onFiles(e.target.files)} />
+        <Button variant="tonal" size="sm" onClick={() => pick.current?.click()}><FileUp size={16} />Open .bpmn files from this computer…</Button>
+      </div>
+      {note && <p className="m-0 text-sm font-semibold text-secondary">{note}</p>}
+    </div>
   )
 }
 

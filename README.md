@@ -51,6 +51,33 @@ npm run dev        # http://localhost:5173
 npm run build      # production build in dist/
 ```
 
+## Publish on SharePoint (with Signavio BPMN processes)
+
+No admin rights, app registration or server are needed: the app is one HTML file, and it reads the Signavio files with each viewer's own SharePoint sign-in.
+
+1. `npm run build:sharepoint` — makes **`dist-sharepoint/process-hub.html`**, one self-contained file (all JavaScript, styles and the icon inside).
+2. In SharePoint, upload `process-hub.html` to a folder (e.g. *Shared Documents/Process Hub*) and put the Signavio exports in the same folder (*Signavio → Export → BPMN 2.0 XML*, `.bpmn`). Sub-folders are read too and become areas in the app.
+3. Open `process-hub.html` from SharePoint. The processes appear with a **Signavio** tag; a line above the list shows which folder is read, how many processes were loaded, or what went wrong.
+
+**Choosing another folder:** by default the app reads the folder it is in. To read a different one, click **Change folder** on that line (or go to **Admin → Processes**) and paste the folder's address from the browser bar, or type the name of a folder next to the page (e.g. `BPMN`). **Use this page's folder** goes back to the default. The choice is saved in that browser.
+
+`setup/sharepoint-bpmn-test.html` is a small test page: upload it where `process-hub.html` will go and open it. It checks that scripts run there and that it can read the folder.
+
+**How a BPMN diagram becomes a process** (`src/lib/bpmn.ts`)
+
+| In Signavio | In Process Hub |
+| --- | --- |
+| Pools and lanes | Roles |
+| Tasks, call activities, collapsed sub-processes | Steps (documentation → "How to do it" / "Why it matters"; linked documents → resources) |
+| Exclusive / inclusive / event-based gateways that split | Checks, with Yes / No paths |
+| Start and end events | "It starts when" and "It's done when" |
+| Groups (or expanded sub-processes) | Stages — without them the steps are split into stages automatically |
+| Boundary events (timer, error, escalation…) | "What if…?" cases |
+| Data stores / IT systems, data objects | Systems and documents of the stage |
+| Message flows to another pool | Woven into the path when that pool just does its part and stops |
+
+Merging and parallel gateways and unnamed events only route the flow, so they are left out and their links joined up. Simple parallel branches are put one after the other so "walk me through it" covers them all. The diagram is read each time the app opens. Only files that changed are downloaded again, and a process whose file was removed disappears. Edits made in the Builder to a Signavio process are replaced when its file changes, so change the model in Signavio instead.
+
 ## Publish on GitHub Pages
 
 **Option A — one command (simplest)**

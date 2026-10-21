@@ -133,6 +133,8 @@ export interface Process {
   exceptions?: { case: string; handled: string }[]
   updatedAt: string
   seeded?: boolean
+  /** set when the process was read from a BPMN file (e.g. a Signavio export in SharePoint) */
+  source?: { kind: 'bpmn'; file: string; path?: string; modified?: string }
 }
 
 export const STAGE_COLORS = ['#2563EB', '#DB2777', '#16A34A', '#EA580C', '#7C3AED', '#0891B2', '#CA8A04', '#DC2626']

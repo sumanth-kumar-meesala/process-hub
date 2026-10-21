@@ -8,12 +8,14 @@ import TimelineView from '@/pages/guide/TimelineView'
 import { useGuide } from '@/lib/guide'
 import type { Process } from '@/lib/types'
 import { useData } from '@/store/store'
+import { useBpmn } from '@/store/bpmn'
 
 /** The Timeline for one process: every stage and step down the left, the chosen step on the right. */
 export default function GuidePage() {
   const { id } = useParams()
   const proc = useData((s) => s.processes.find((p) => p.id === id))
-  const hydrated = useData((s) => s.hydrated)
+  const bpmnLoading = useBpmn((s) => s.status) === 'loading'
+  const hydrated = useData((s) => s.hydrated) && !bpmnLoading
   if (!proc) return (
     <div><AppHeader /><p className="p-10 text-on-surface-variant">{hydrated ? 'That process could not be found.' : 'Loading…'} <Link to="/">Back to processes</Link></p></div>
   )

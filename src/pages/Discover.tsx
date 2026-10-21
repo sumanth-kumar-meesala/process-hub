@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, Plus, Search, Sparkles, Users, Wallet, HeartHandshake, Box } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
+import { BpmnStatus } from '@/components/BpmnStatus'
 import { Button } from '@/components/ui/button'
 import { canBuild, useData, useSession } from '@/store/store'
 import { displayName, procPath, stepCount } from '@/lib/derive'
@@ -79,6 +80,7 @@ export default function Discover() {
         )}
 
         <section className="flex flex-col gap-4">
+          <BpmnStatus />
           <div className="flex flex-wrap items-center gap-2">
             {areas.map((a) => (
               <button key={a} onClick={() => setArea(a)}
@@ -108,6 +110,7 @@ export default function Discover() {
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="text-lg font-extrabold">{displayName(p)}</span>
+                      {p.source?.kind === 'bpmn' && <span className="rounded-full bg-primary-container px-2 py-0.5 text-xs font-bold text-on-primary-container">Signavio</span>}
                       {p.status === 'draft' && <span className="rounded-full bg-surface-mid px-2 py-0.5 text-xs font-bold">Draft</span>}
                       {mine && <span className="rounded-full bg-secondary-container px-2 py-0.5 text-xs font-bold text-on-secondary-container">You're in this</span>}
                       {p.needsCompleting && <span className="rounded-full bg-tertiary-container px-2 py-0.5 text-xs font-bold text-[#9A4A00]">Being completed</span>}

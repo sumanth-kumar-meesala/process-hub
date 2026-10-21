@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ChevronDown, ChevronUp, MousePointerClick, Pencil, RotateCcw, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronDown, ChevronUp, MousePointerClick, Pencil, RotateCcw, Workflow, ZoomIn, ZoomOut } from 'lucide-react'
 import { AppHeader } from '@/components/AppHeader'
 import { Button } from '@/components/ui/button'
 import Islands3D from '@/three/Islands3D'
 import { canEdit, useData, useSession } from '@/store/store'
+import { useBpmn } from '@/store/bpmn'
 import { stageRoles } from '@/lib/derive'
 import type { Process } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -18,7 +19,8 @@ import { StageSidePanel } from '@/components/process/StageSidePanel'
 export default function ProcessPage({ view = '3d' }: { view?: '3d' | 'sidebar' }) {
   const { id } = useParams()
   const proc = useData((s) => s.processes.find((p) => p.id === id))
-  const hydrated = useData((s) => s.hydrated)
+  const bpmnLoading = useBpmn((s) => s.status) === 'loading'
+  const hydrated = useData((s) => s.hydrated) && !bpmnLoading
   if (!proc) return (
     <div><AppHeader /><p className="p-10 text-on-surface-variant">{hydrated ? 'That process could not be found.' : 'Loading…'} <Link to="/">Back to processes</Link></p></div>
   )
@@ -80,7 +82,12 @@ function ProcessView({ proc, view }: { proc: Process; view: '3d' | 'sidebar' }) 
       </AppHeader>
       <ProcessHeader proc={proc} run={run} current={view} />
       <main className="mx-auto flex max-w-[1360px] flex-col gap-5 px-3 pb-4 pt-1 sm:px-6">
-        {proc.draftNote && !proc.needsCompleting && (
+        {proc.draftNote && !proc.needsCompleting && proc.source?.kind === 'bpmn' && (
+          <div className="flex items-start gap-3 rounded-[18px] bg-primary-container/50 px-5 py-3 text-sm text-on-primary-container">
+            <Workflow size={16} className="mt-0.5 flex-none" aria-hidden /><span><b>From Signavio.</b> {proc.draftNote}</span>
+          </div>
+        )}
+        {proc.draftNote && !proc.needsCompleting && proc.source?.kind !== 'bpmn' && (
           <div className="flex items-start gap-3 rounded-[18px] bg-[#FFF7E6] px-5 py-3 text-sm text-[#7A3A00]">
             <Pencil size={16} className="mt-0.5 flex-none" aria-hidden /><span><b>To be confirmed.</b> {proc.draftNote}</span>
           </div>

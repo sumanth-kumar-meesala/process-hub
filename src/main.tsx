@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter, Route, Routes } from 'react-router-dom'
 import './index.css'
 import Discover from '@/pages/Discover'
+import { BpmnSync } from '@/components/BpmnStatus'
 
 // Heavy screens (3D, canvas) load on demand
 const ProcessPage = lazy(() => import('@/pages/ProcessPage'))
@@ -14,6 +15,7 @@ const Loading = () => <div className="p-10 text-on-surface-variant">Loading…</
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <BpmnSync />
     <HashRouter>
       <Suspense fallback={<Loading />}>
         <Routes>

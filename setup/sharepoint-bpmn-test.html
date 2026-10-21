@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Process Hub – SharePoint test</title>
+<style>
+  :root { --bg:#f7f7f9; --card:#fff; --ink:#1c1b1f; --muted:#5f5e66; --line:#e3e2e8; --ok:#15803d; --bad:#b91c1c; --warn:#a16207; --accent:#2563eb; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  p.lead { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 15px; margin: 0 0 8px; }
+  label { display:block; font-weight:600; margin-bottom:6px; }
+  input[type=text] { width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; }
+  button { margin-top:10px; padding:9px 16px; border:0; border-radius:8px; background:var(--accent); color:#fff; font:inherit; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .row { display:flex; gap:8px; align-items:flex-start; padding:6px 0; border-top:1px solid var(--line); }
+  .row:first-child { border-top:0; }
+  .dot { flex:none; width:20px; text-align:center; font-weight:700; }
+  .ok .dot { color:var(--ok); } .bad .dot { color:var(--bad); } .warn .dot { color:var(--warn); } .wait .dot { color:var(--muted); }
+  .small { color:var(--muted); font-size:13px; }
+  code { background:#f0eff4; padding:1px 5px; border-radius:4px; font-size:13px; word-break:break-all; }
+  ul.files { margin:6px 0 0; padding-left:18px; }
+  #nojs { background:#fef2f2; border:1px solid #fecaca; color:var(--bad); border-radius:12px; padding:14px 16px; margin-bottom:14px; font-weight:600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Process Hub – SharePoint test</h1>
+  <p class="lead">Checks whether Process Hub can run here and read Signavio BPMN files from a SharePoint folder, using your own sign-in.</p>
+
+  <div id="nojs">✗ JavaScript is NOT running on this page. If this message stays, SharePoint is blocking scripts here, and the app can't run from this location.</div>
+
+  <div class="card">
+    <h2>1. This page</h2>
+    <div id="env"></div>
+  </div>
+
+  <div class="card">
+    <h2>2. The BPMN folder</h2>
+    <label for="folder">Paste the folder's address (open the folder in SharePoint and copy it from the browser bar)</label>
+    <input id="folder" type="text" placeholder="https://yourcompany.sharepoint.com/sites/YourSite/Shared Documents/BPMN" />
+    <button id="go">Check folder</button>
+    <div id="out" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. Optional: read a .bpmn file from your computer</h2>
+    <p class="small">Checks the file itself, without SharePoint.</p>
+    <input id="pick" type="file" accept=".bpmn,.xml" />
+    <div id="pickOut" style="margin-top:8px"></div>
+  </div>
+
+  <p class="small">Copy everything on this page (or take a screenshot) and send it back.</p>
+</main>
+
+<script>
+(function () {
+  document.getElementById('nojs').style.display = 'none';
+  var BPMN_NS = 'http://www.omg.org/spec/BPMN/20100524/MODEL';
+  var TASKS = ['task','userTask','manualTask','serviceTask','scriptTask','sendTask','receiveTask','businessRuleTask','callActivity','subProcess'];
+  var GATEWAYS = ['exclusiveGateway','parallelGateway','inclusiveGateway','eventBasedGateway','complexGateway'];
+
+  function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]; }); }
+  function row(box, state, html) { var r = el('div', 'row ' + state); r.appendChild(el('span', 'dot', { ok:'✓', bad:'✗', warn:'!', wait:'…' }[state])); r.appendChild(el('div', '', html)); box.appendChild(r); return r; }
+
+  // ---------- 1. environment ----------
+  var env = document.getElementById('env');
+  var host = location.hostname;
+  var onSP = /\.sharepoint\.com$/i.test(host) || /\.sharepoint\.(us|de|cn)$/i.test(host);
+  row(env, 'ok', 'JavaScript runs on this page.');
+  row(env, onSP ? 'ok' : 'bad', 'Page is served from <code>' + esc(location.origin) + '</code>' + (onSP ? ' — your SharePoint site.' : ' — not SharePoint, so it can\'t read SharePoint folders from here.'));
+  var inFrame = false; try { inFrame = window.self !== window.top; } catch (e) { inFrame = true; }
+  row(env, inFrame ? 'warn' : 'ok', inFrame ? 'Page is shown inside a frame. That\'s fine if the checks below pass.' : 'Page is opened directly (not inside a frame).');
+  try { indexedDB.open('ph-test'); localStorage.setItem('ph-test', '1'); row(env, 'ok', 'Browser storage works (the app saves edits there).'); }
+  catch (e) { row(env, 'warn', 'Browser storage is blocked here: ' + esc(e.message)); }
+  var gl = null; try { var c = document.createElement('canvas'); gl = c.getContext('webgl2') || c.getContext('webgl'); } catch (e) {}
+  row(env, gl ? 'ok' : 'warn', gl ? '3D (WebGL) is available.' : '3D (WebGL) is not available; the app would show the plain list instead.');
+
+  // remember the last folder
+  var input = document.getElementById('folder');
+  try { input.value = localStorage.getItem('ph-test-folder') || ''; } catch (e) {}
+  // by default: the folder this page is in (where Process Hub reads its .bpmn files unless told otherwise)
+  if (!input.value && onSP) input.value = location.origin + location.pathname.replace(/\/[^/]*$/, '');
+
+  // ---------- 2. SharePoint folder ----------
+  function parseFolder(raw) {
+    raw = raw.trim();
+    var u;
+    try { u = new URL(raw, location.origin); } catch (e) { return null; }
+    var path = '';
+    var id = u.searchParams.get('id') || u.searchParams.get('RootFolder');
+    if (id) path = id;                                             // .../Forms/AllItems.aspx?id=/sites/...
+    else path = decodeURIComponent(u.pathname);
+    path = path.replace(/^\/:[a-z]:\/r\//i, '/');                   // /:f:/r/sites/... links
+    path = path.replace(/\/Forms\/[^/]+\.aspx$/i, '');
+    path = path.replace(/\/+$/, '');
+    return { origin: u.origin, path: path };
+  }
+  function siteCandidates(path) {
+    var parts = path.split('/').filter(Boolean), out = [];
+    var start = (parts[0] === 'sites' || parts[0] === 'teams' || parts[0] === 'personal') ? 2 : 0;
+    for (var i = start; i < parts.length; i++) out.push('/' + parts.slice(0, i).join('/'));
+    if (!out.length) out.push('');
+    return out.map(function (s) { return s === '/' ? '' : s; });
+  }
+  function alias(p) { return "'" + encodeURIComponent(p.replace(/'/g, "''")) + "'"; }
+  function api(url, asText) {
+    return fetch(url, { credentials: 'include', headers: { Accept: asText ? '*/*' : 'application/json;odata=nometadata' } })
+      .then(function (r) {
+        if (!r.ok) return r.text().then(function (t) {
+          var m = ''; try { var j = JSON.parse(t); m = (j['odata.error'] && j['odata.error'].message.value) || (j.error && j.error.message && (j.error.message.value || j.error.message)) || ''; } catch (e) {}
+          var err = new Error('HTTP ' + r.status + (m ? ' – ' + m : '')); err.status = r.status; throw err;
+        });
+        return asText ? r.text() : r.json();
+      });
+  }
+
+  function summarize(xml) {
+    var doc = new DOMParser().parseFromString(xml, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) return { error: 'Not valid XML' };
+    var defs = doc.getElementsByTagNameNS(BPMN_NS, 'definitions')[0];
+    if (!defs) return { error: 'Not a BPMN 2.0 file' };
+    function count(list) { return list.reduce(function (n, t) { return n + doc.getElementsByTagNameNS(BPMN_NS, t).length; }, 0); }
+    var exporter = defs.getAttribute('exporter') || '';
+    var signavio = /signavio/i.test(exporter) || /signavio/i.test(xml.slice(0, 3000));
+    var names = [];
+    var procs = doc.getElementsByTagNameNS(BPMN_NS, 'process');
+    for (var i = 0; i < procs.length; i++) if (procs[i].getAttribute('name')) names.push(procs[i].getAttribute('name'));
+    var parts = doc.getElementsByTagNameNS(BPMN_NS, 'participant');
+    for (var j = 0; j < parts.length && !names.length; j++) if (parts[j].getAttribute('name')) names.push(parts[j].getAttribute('name'));
+    return {
+      name: names[0] || '(no name)', signavio: signavio, exporter: exporter,
+      pools: parts.length, lanes: count(['lane']), tasks: count(TASKS), gateways: count(GATEWAYS),
+      events: count(['startEvent', 'endEvent', 'intermediateCatchEvent', 'intermediateThrowEvent', 'boundaryEvent']),
+      flows: count(['sequenceFlow']), groups: count(['group']), subprocesses: count(['subProcess']),
+      dataObjects: count(['dataObjectReference', 'dataStoreReference']),
+    };
+  }
+  function summaryHtml(name, s) {
+    if (s.error) return '<b>' + esc(name) + '</b>: ' + esc(s.error);
+    return '<b>' + esc(name) + '</b> — process “' + esc(s.name) + '”' + (s.signavio ? ' (Signavio export)' : (s.exporter ? ' (from ' + esc(s.exporter) + ')' : '')) +
+      '<br><span class="small">' + [s.pools + ' pools', s.lanes + ' lanes', s.tasks + ' tasks', s.gateways + ' gateways', s.events + ' events', s.flows + ' connections', s.groups + ' groups', s.subprocesses + ' sub-processes', s.dataObjects + ' data objects/stores'].join(' · ') + '</span>';
+  }
+
+  var out = document.getElementById('out'), go = document.getElementById('go');
+  go.onclick = function () {
+    out.innerHTML = '';
+    var f = parseFolder(input.value);
+    if (!f || !f.path) { row(out, 'bad', 'That doesn\'t look like a folder address.'); return; }
+    try { localStorage.setItem('ph-test-folder', input.value.trim()); } catch (e) {}
+    if (f.origin !== location.origin) row(out, 'warn', 'The folder is on <code>' + esc(f.origin) + '</code> but this page is on <code>' + esc(location.origin) + '</code>. The browser will likely block this; the page must be uploaded to the same SharePoint.');
+    row(out, 'ok', 'Folder path: <code>' + esc(f.path) + '</code>');
+    go.disabled = true;
+    var wait = row(out, 'wait', 'Looking for the site that holds this folder…');
+    var sites = siteCandidates(f.path), site = null, folderInfo = null;
+
+    (function tryNext(i) {
+      if (i >= sites.length) return Promise.reject(new Error('Could not open the folder from any site address. Check the address, and that you can open the folder in SharePoint.'));
+      var base = f.origin + sites[i];
+      return api(base + '/_api/web/GetFolderByServerRelativePath(decodedurl=@a1)?@a1=' + alias(f.path) + '&$select=Name,ServerRelativeUrl,ItemCount')
+        .then(function (info) { site = base; folderInfo = info; })
+        .catch(function (e) { if (e.status === 401 || e.status === 403) throw e; return tryNext(i + 1); });
+    })(0)
+    .then(function () {
+      wait.remove();
+      return api(site + '/_api/web?$select=Title,Url').then(function (w) {
+        row(out, 'ok', 'Signed in and can read the site <b>' + esc(w.Title) + '</b> (<code>' + esc(w.Url) + '</code>).');
+        row(out, 'ok', 'Folder <b>' + esc(folderInfo.Name) + '</b> found (' + folderInfo.ItemCount + ' items).');
+      });
+    })
+    .then(function () {
+      var fa = '@a1=' + alias(f.path);
+      return Promise.all([
+        api(site + '/_api/web/GetFolderByServerRelativePath(decodedurl=@a1)/Files?' + fa + '&$select=Name,ServerRelativeUrl,TimeLastModified,Length&$top=500'),
+        api(site + '/_api/web/GetFolderByServerRelativePath(decodedurl=@a1)/Folders?' + fa + '&$select=Name&$top=500'),
+      ]);
+    })
+    .then(function (res) {
+      var files = res[0].value || [], folders = (res[1].value || []).filter(function (x) { return x.Name !== 'Forms'; });
+      var bpmn = files.filter(function (x) { return /\.(bpmn|bpmn2|xml)$/i.test(x.Name); });
+      row(out, bpmn.length ? 'ok' : 'warn', bpmn.length + ' BPMN file(s) out of ' + files.length + ' file(s)' + (folders.length ? ', plus ' + folders.length + ' sub-folder(s): ' + folders.map(function (x) { return esc(x.Name); }).join(', ') : '') + '.');
+      if (!bpmn.length) return;
+      var shown = bpmn.slice(0, 5), box = row(out, 'wait', 'Reading ' + shown.length + ' file(s)…');
+      return Promise.all(shown.map(function (fl) {
+        return api(site + '/_api/web/GetFileByServerRelativePath(decodedurl=@a1)/$value?@a1=' + alias(fl.ServerRelativeUrl), true)
+          .then(function (xml) { return summaryHtml(fl.Name, summarize(xml)); })
+          .catch(function (e) { return '<b>' + esc(fl.Name) + '</b>: could not read – ' + esc(e.message); });
+      })).then(function (lines) {
+        box.remove();
+        row(out, 'ok', 'Read the files:<ul class="files"><li>' + lines.join('</li><li>') + '</li></ul>');
+        row(out, 'ok', '<b>All good: Process Hub can load BPMN processes from this folder.</b>');
+      });
+    })
+    .catch(function (e) {
+      wait.remove && wait.remove();
+      var msg = e && e.message || String(e);
+      if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) msg += ' — the browser blocked the request (usually because this page isn\'t on the same SharePoint site address).';
+      if (e.status === 401 || e.status === 403) msg += ' — you may not have access to this folder, or the page isn\'t running with your SharePoint sign-in.';
+      row(out, 'bad', esc(msg));
+    })
+    .then(function () { go.disabled = false; });
+  };
+
+  // ---------- 3. local file ----------
+  document.getElementById('pick').onchange = function (ev) {
+    var file = ev.target.files[0], box = document.getElementById('pickOut'); box.innerHTML = '';
+    if (!file) return;
+    file.text().then(function (xml) { row(box, 'ok', summaryHtml(file.name, summarize(xml))); })
+      .catch(function (e) { row(box, 'bad', esc(e.message)); });
+  };
+})();
+</script>
+</body>
+</html>

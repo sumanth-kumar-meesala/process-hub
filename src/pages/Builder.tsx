@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { ConfirmButton } from '@/components/ui/confirm'
 import Islands3D from '@/three/Islands3D'
 import { canBuild, canEdit, personaUser, useData, useSession } from '@/store/store'
+import { useBpmn } from '@/store/bpmn'
 import { ROLE_COLORS, STAGE_COLORS, tint, uid, type LibraryItem, type Process, type ResourceCategory, type RoleKind, type SceneKind, type Step, type StepKind } from '@/lib/types'
 import { CATEGORIES, autoAssign, catOf, suggestFor, suggestLinked } from '@/lib/resources'
 import { displayName, roleKind, stepCount } from '@/lib/derive'
@@ -46,7 +47,8 @@ export default function Builder() {
   const { id } = useParams()
   const { persona } = useSession()
   const processes = useData((s) => s.processes)
-  const hydrated = useData((s) => s.hydrated)
+  const bpmnLoading = useBpmn((s) => s.status) === 'loading'
+  const hydrated = useData((s) => s.hydrated) && !bpmnLoading
   if (!canBuild(persona)) return (
     <div><AppHeader />
       <div className="mx-auto max-w-[640px] p-10"><div className="rounded-[24px] bg-white p-8">
