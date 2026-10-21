@@ -89,7 +89,10 @@ export function PreparePage() {
   const prior = useMemo(() => pageSetup(), [])
   const [folder, setFolder] = useState(prior.config.folder ?? '')
   const [pasted, setPasted] = useState('')
-  const [done, setDone] = useState('')
+  // the prepared page, waiting to be saved with a real click (browsers like Safari block downloads that start on their own)
+  const [ready, setReady] = useState<{ url: string; count: number } | null>(null)
+  const [saved, setSaved] = useState(false)
+  const reset = () => { setReady(null); setSaved(false) }
   const [pickError, setPickError] = useState('')
   const pick = useRef<HTMLInputElement>(null)
   const links = linksFor(folder)
@@ -97,17 +100,14 @@ export function PreparePage() {
   const usable = found && !found.error ? found.items.slice(0, MAX) : []
 
   const make = async (file?: File) => {
-    setPickError(''); setDone('')
+    setPickError('')
     if (!file || !links) return
     const html = await file.text()
     if (!html.includes(`${LT}div id="root">`) || !html.includes('Process Hub')) { setPickError("That isn't process-hub.html. Choose the process-hub.html file you upload to SharePoint."); return }
     const out = withLiveData(html, usable, { folder: links.folder, preparedAt: new Date().toISOString() })
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([out], { type: 'text/html' }))
-    a.download = 'process-hub.html'
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-    setDone(`Saved a new process-hub.html with ${usable.length} BPMN file${usable.length === 1 ? '' : 's'} linked (look in your Downloads).`)
+    if (ready) URL.revokeObjectURL(ready.url)
+    setReady({ url: URL.createObjectURL(new Blob([out], { type: 'text/html' })), count: usable.length })
+    setSaved(false)
     if (pick.current) pick.current.value = ''
   }
 
@@ -121,7 +121,7 @@ export function PreparePage() {
 
       <div className={stepCls}>{n(1)}
         <label className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm font-bold">The SharePoint folder with the .bpmn files
-          <input value={folder} onChange={(e) => { setFolder(e.target.value); setPasted(''); setDone('') }}
+          <input value={folder} onChange={(e) => { setFolder(e.target.value); setPasted(''); reset() }}
             placeholder="https://<company>.sharepoint.com/sites/<site>/Shared Documents/BPMN"
             className="h-11 w-full rounded-[12px] border border-outline-variant bg-white px-3 text-sm font-normal box-border" />
           <span className="text-xs font-normal text-on-surface-variant">Open the folder in SharePoint and copy the address from the browser bar (or use “Copy link” on the folder).</span>
@@ -136,7 +136,7 @@ export function PreparePage() {
             <a href={links.viaShare} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 break-all font-bold text-primary"><ExternalLink size={14} className="flex-none" aria-hidden />List the files in this folder</a>
             {links.viaPath && <a href={links.viaPath} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-[13px] text-primary"><ExternalLink size={13} className="flex-none" aria-hidden />If that shows an error, try this link instead</a>}
             <span className="text-xs text-on-surface-variant">It opens in a new tab, with your own SharePoint sign-in. Select everything on that tab (Ctrl+A / ⌘A), copy it, and paste it below.</span>
-            <textarea value={pasted} onChange={(e) => { setPasted(e.target.value); setDone('') }} rows={4} placeholder='{"@odata.context": … "value": [ … ] }'
+            <textarea value={pasted} onChange={(e) => { setPasted(e.target.value); reset() }} rows={4} placeholder='{"@odata.context": … "value": [ … ] }'
               className="w-full rounded-[12px] border border-outline-variant bg-white p-3 font-mono text-xs box-border" />
             {found?.error && <span className="text-[13px] text-error">{found.error}</span>}
             {found && !found.error && (
@@ -153,14 +153,22 @@ export function PreparePage() {
       {usable.length > 0 && (
         <div className={stepCls}>{n(3)}
           <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm">
-            <b>Choose your process-hub.html — a copy with these files linked is saved to your Downloads</b>
+            <b>Choose your process-hub.html (the one in dist-sharepoint) — a copy with these files linked is made</b>
             <input ref={pick} type="file" accept=".html,text/html" className="hidden" onChange={(e) => make(e.target.files?.[0])} />
             <div><Button size="sm" onClick={() => pick.current?.click()}><Download size={15} />Choose process-hub.html…</Button></div>
             {pickError && <span className="text-[13px] text-error">{pickError}</span>}
-            {done && (
-              <div className="flex items-start gap-2 rounded-[12px] bg-secondary-container/60 p-3 text-[13px] text-on-secondary-container">
-                <CheckCircle2 size={16} className="mt-0.5 flex-none" aria-hidden />
-                <span>{done} Upload it to the site's <b>Site Pages</b> library in place of the old one. From then on, BPMN files that are changed and exported again under the same name update by themselves; to add or remove files, do this again.</span>
+            {ready && (
+              <div className="flex flex-col gap-2 rounded-[12px] bg-secondary-container/60 p-3 text-[13px] text-on-secondary-container">
+                <span className="flex items-start gap-2"><CheckCircle2 size={16} className="mt-0.5 flex-none" aria-hidden />Ready: a new process-hub.html with {ready.count} BPMN file{ready.count === 1 ? '' : 's'} linked.</span>
+                <div><a href={ready.url} download="process-hub.html" onClick={() => setSaved(true)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-bold text-white no-underline"><Download size={15} aria-hidden />Save process-hub.html</a></div>
+                {saved && (
+                  <ol className="m-0 flex flex-col gap-1 pl-5">
+                    <li>Find it in your <b>Downloads</b>. If there was one already, your browser may have named it <b>process-hub (1).html</b> — use the newest one (rename it to process-hub.html if you like).</li>
+                    <li>Upload it to SharePoint in place of the old process-hub.html (the same place you uploaded it before), and open it there.</li>
+                    <li>The processes show up <b>there</b>, not here: this copy on your computer can't read SharePoint files. (To look at a file here, use “Open .bpmn files…” below.)</li>
+                  </ol>
+                )}
               </div>
             )}
           </div>

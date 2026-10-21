@@ -45,6 +45,18 @@ interface Link { from: string; to: string; label?: string; prio: number }
 interface Box { x: number; y: number; w: number; h: number }
 
 const clean = (s?: string | null) => (s ?? '').replace(/\s+/g, ' ').trim()
+const BULLET = /^([-*•·–]|\d+[.)])\s+/
+/**
+ * A shape's text as one line. Wrapped lines are joined with a space; separate paragraphs and bullet lists
+ * (Signavio events often list linked processes: "- FS43 Create Client Details / - FS08, Manage Plan Review")
+ * become "FS43 Create Client Details · FS08, Manage Plan Review".
+ */
+const textOf = (s?: string | null) => (s ?? '').split(/\r?\n\s*\r?\n/)
+  .flatMap((para) => {
+    const lines = para.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+    return lines.some((l) => BULLET.test(l)) ? lines.map((l) => l.replace(BULLET, '')) : [lines.join(' ')]
+  })
+  .map(clean).filter(Boolean).join(' · ')
 const kids = (el: Element, name?: string) => Array.from(el.children).filter((c) => !name || c.localName === name)
 const all = (doc: Document | Element, name: string) => Array.from(doc.getElementsByTagNameNS('*', name))
 const centre = (b: Box) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 })
@@ -137,7 +149,8 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
       const child = kids(lane, 'childLaneSet')[0]
       if (child && kids(child, 'lane').length) walkLanes(child); else leaves.push(lane)
     })
-    kids(proc, 'laneSet').forEach(walkLanes)
+    // lanes of the process, and of expanded sub-processes inside it (they can have lanes of their own)
+    all(proc, 'laneSet').forEach(walkLanes)
     if (leaves.length) {
       leaves.forEach((lane) => {
         const r = roleFor(clean(lane.getAttribute('name')) || poolName || 'Team')
@@ -164,7 +177,7 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
       const isTask = TASKS.has(t), isSub = SUBS.has(t), isGw = GATEWAYS.has(t)
       const isEvent = t === 'startEvent' || t === 'endEvent' || MID_EVENTS.has(t)
       if (!isTask && !isSub && !isGw && !isEvent) continue
-      const name = clean(el.getAttribute('name'))
+      const name = textOf(el.getAttribute('name'))
       let kind: Kind = 'step'
       if (t === 'startEvent') kind = sub ? 'pass' : 'start'
       else if (t === 'endEvent') kind = sub ? 'pass' : 'end'
@@ -214,7 +227,7 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
   for (const b of boundaries) {
     const on = b.getAttribute('attachedToRef') ?? ''
     if (!nodes.has(on)) continue
-    const what = clean(b.getAttribute('name')) || eventWords(b)
+    const what = textOf(b.getAttribute('name')) || eventWords(b)
     const id = b.getAttribute('id') ?? ''
     // the boundary event becomes a routing-only node hanging off its step, so its path joins up below
     nodes.set(id, { id, el: b, type: 'boundaryEvent', name: what, kind: 'pass', roleId: nodes.get(on)!.roleId, sub: nodes.get(on)!.sub, box: boxes.get(id) })
@@ -393,18 +406,47 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
   }
   let auto = false
   if (keyOf.size) {
-    // steps outside any group: a run of them becomes a stage of its own (named after its first step)…
-    let run: Node[] = [], runNo = 0
-    const flush = () => { if (run.length >= 2) { const k = `r${runNo++}`; run.forEach((n) => keyOf.set(n.id, k)) } run = [] }
-    for (const n of work) { if (keyOf.has(n.id)) flush(); else run.push(n) }
-    flush()
-    // …and a single one joins the stage of the step before it (or after, at the start)
+    const loose = work.filter((n) => !keyOf.has(n.id))
+    // where are the groups / sub-processes on the diagram (left to right)?
+    const bands = [...new Set(keyOf.values())].map((k) => {
+      const box = k.startsWith('g') ? groups[+k.slice(1)].box : subs.find((x) => x.id === k.slice(1))?.box
+      return box ? { k, x0: box.x, x1: box.x + box.w } : null
+    }).filter((b): b is { k: string; x0: number; x1: number } => !!b).sort((a, b) => a.x0 - b.x0)
+    if (hasPos && bands.length) {
+      // a step outside them belongs to the group in its column; steps between groups form stages of their own
+      const gaps = new Map<number, Node[]>()
+      for (const n of loose) {
+        const cx = centre(n.box!).x
+        const band = bands.find((b) => cx >= b.x0 && cx <= b.x1)
+        if (band) { keyOf.set(n.id, band.k); continue }
+        const gi = bands.filter((b) => b.x1 < cx).length
+        gaps.set(gi, [...(gaps.get(gi) ?? []), n])
+      }
+      // long stretches are cut into readable chunks, so a big diagram ends up with about 8 stages
+      const gapSteps = [...gaps.values()].reduce((a, g) => a + g.length, 0)
+      const size = Math.max(6, Math.ceil(gapSteps / Math.max(1, 8 - bands.length)))
+      for (const [gi, list] of gaps) {
+        const parts = Math.max(1, Math.round(list.length / size))
+        const per = Math.ceil(list.length / parts)
+        list.forEach((n, i) => keyOf.set(n.id, `r${gi}-${Math.floor(i / per)}`))
+      }
+    } else {
+      // no positions: a run of steps outside them becomes a stage of its own…
+      let run: Node[] = [], runNo = 0
+      const flush = () => { if (run.length >= 2) { const k = `r${runNo++}`; run.forEach((n) => keyOf.set(n.id, k)) } run = [] }
+      for (const n of work) { if (keyOf.has(n.id)) flush(); else run.push(n) }
+      flush()
+    }
+    // …and a single one left over joins the stage of the step before it (or after, at the start)
     let prev: string | undefined
     for (const n of work) { if (keyOf.has(n.id)) prev = keyOf.get(n.id); else if (prev) keyOf.set(n.id, prev) }
     let next: string | undefined
     for (const n of [...work].reverse()) { if (keyOf.has(n.id)) next = keyOf.get(n.id); else if (next) keyOf.set(n.id, next) }
     // stages in reading order (left to right on the diagram)
     const keys = [...new Set(work.map((n) => keyOf.get(n.id)!))]
+    // in the order the work reaches them from the start (ties keep the left-to-right order)
+    const reached = (k: string) => Math.min(...work.filter((n) => keyOf.get(n.id) === k).map((n) => level.get(n.id) ?? 1e6))
+    keys.sort((a, b) => reached(a) - reached(b))
     keys.forEach((k, i) => {
       stageNames.push(k.startsWith('g') ? groups[+k.slice(1)].name : k.startsWith('s') ? clean(subs.find((s) => s.id === k.slice(1))?.name) : '')
       work.filter((n) => keyOf.get(n.id) === k).forEach((n) => stageOf.set(n.id, i))
@@ -487,11 +529,12 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
     inStage.forEach((n) => roleCount.set(n.roleId, (roleCount.get(n.roleId) ?? 0) + 1))
     const mainRole = [...roleCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
     const roleNames = [...roleCount.keys()].map((r) => roles.find((x) => x.id === r)?.name).filter(Boolean) as string[]
-    const title = name || (inStage[0]?.name ?? `Stage ${i + 1}`).replace(/\?$/, '')
+    const fromStep = (t: string) => { const w = t.replace(/\?$/, '').split(' '); return w.length > 7 ? `${w.slice(0, 6).join(' ')}…` : w.join(' ') }
+    const title = name || fromStep(inStage[0]?.name ?? `Stage ${i + 1}`)
     const labels = inStage.map((n) => n.name || 'Untitled step')
     const text = `${roleNames.length > 1 ? `${roleNames.slice(0, -1).join(', ')} and ${roleNames[roleNames.length - 1]}` : roleNames[0] ?? 'The team'}: ${labels.join(' → ')}.`
     return {
-      id, title, short: title.split(' ').slice(0, 3).join(' '),
+      id, title, short: title.split(' ').filter((w) => /\w/.test(w)).slice(0, 3).join(' ').replace(/…$/, ''),
       place: roles.find((r) => r.id === mainRole)?.name ?? '',
       text, color: STAGE_COLORS[i % STAGE_COLORS.length],
       systems: [...new Set(inStage.flatMap((n) => [...(extra.get(n.id)?.systems ?? [])]))],
@@ -501,9 +544,9 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
   })
 
   const label = (id: string) => nodes.get(id)?.name || ''
-  const triggers = steps.filter((s) => s.kind === 'start').map((s) => s.label).filter((l) => l !== 'Start')
+  const triggers = [...new Set(steps.filter((s) => s.kind === 'start').map((s) => s.label).filter((l) => l !== 'Start'))]
   // the finish in the last stage (the usual ending) comes first
-  const outcomes = steps.filter((s) => s.kind === 'end').reverse().map((s) => s.label).filter((l) => l !== 'Finish')
+  const outcomes = [...new Set(steps.filter((s) => s.kind === 'end').reverse().map((s) => s.label).filter((l) => l !== 'Finish'))]
 
   // ---------- titles and text ----------
   const base = src.file.replace(/\.(bpmn2?|xml)$/i, '').replace(/[_]+/g, ' ').trim()
@@ -514,7 +557,9 @@ export function bpmnToProcess(xml: string, src: BpmnSource): BpmnResult {
   const m = title.match(/^([A-Z]{1,6}[-.]?\d{1,4}(?:\.\d+)*)\s*[-–:·]?\s+(.+)$/)
   if (m) { code = m[1]; title = m[2] }
   const description = docText(procs[0]) || (participants[0] ? docText(participants[0]) : '') || docText(defs)
-  const ownerMeta = [...procs, ...participants, defs].flatMap(meta).find((x) => /owner|verantwort|responsib|eigent/i.test(x.key) && clean(x.value) && !/^\[?\]?$/.test(x.value))
+  // Signavio keeps the process owner with the diagram (signavioDiagramMetaData, e.g. meta-processowner)
+  const diagramMeta = all(defs, 'signavioDiagramMetaData').map((m) => ({ key: m.getAttribute('metaKey') ?? '', value: m.getAttribute('metaValue') ?? '' }))
+  const ownerMeta = [...diagramMeta, ...[...procs, ...participants, defs].flatMap(meta)].find((x) => /owner|verantwort|responsib|eigent/i.test(x.key) && clean(x.value) && !/^\[?\]?$/.test(x.value))
   let owner = ownerMeta ? clean(ownerMeta.value).replace(/^\[?"?|"?\]?$/g, '') : ''
   if (/^[{[]/.test(owner)) owner = ''
   const roleList = roles.map((r) => r.name)
