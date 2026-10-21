@@ -33,6 +33,8 @@ export interface GuideStep {
   handTo?: Role
   /** when the next step isn't linked to this one: the walk moves on to another path or starting point */
   jump?: string
+  /** a check whose "No" answer ends the path (it leads straight to the end) */
+  noEnds: boolean
   docs: GuideDoc[]
   mine: boolean
 }
@@ -78,7 +80,7 @@ export function buildGuide(p: Process, lib: LibraryItem[], roleId: string | null
     const i = usualMine.findIndex((x) => x.id === st.id)
     return {
       st, stage: p.stages[stageIdx], stageIdx, role: roleOf(st), isCheck, onPath: usualIds.has(st.id), n: i >= 0 ? i + 1 : null, local: null,
-      yes, no, noBack: !!no && order(no.id) < order(st.id), thenBack, handTo, jump, docs, mine: mine(st),
+      yes, no, noBack: !!no && order(no.id) < order(st.id), noEnds: !!noLink && isEnd(p, noLink.to), thenBack, handTo, jump, docs, mine: mine(st),
     }
   })
   // number each stage's normal steps on the usual path 1, 2, 3… within the stage, shown as "stage.step"
@@ -102,7 +104,30 @@ export function buildGuide(p: Process, lib: LibraryItem[], roleId: string | null
   }
   /** the steps that are "only when a check says No", for one check */
   const usedIn = (itemId: string, exceptId: string) => steps.filter((g) => g.st.id !== exceptId && g.docs.some((d) => d.it.id === itemId)).map((g) => g.st.label)
-  return { steps, stages, get, forward, usedIn, total: usualMine.length, start: forward(firstStep(p)).id ?? firstStep(p) }
+  /**
+   * After answering "No" at a check whose No path ends straight away: where the walk carries on — the next step
+   * (in the usual order) that isn't only reachable through the check's "Yes" answer, which no longer applies.
+   */
+  const afterDeclined = (checkId: string) => {
+    const reach = (from: string[], skip?: string) => {
+      const seen = new Set<string>(), queue = [...from]
+      while (queue.length) {
+        const id = queue.shift()!
+        if (seen.has(id)) continue
+        seen.add(id)
+        if (id !== skip) p.edges.filter((e) => e.from === id).forEach((e) => queue.push(e.to))
+      }
+      return seen
+    }
+    const entries = [...p.steps.filter((s) => s.kind === 'start').map((s) => s.id), ...work.filter((s) => !p.edges.some((e) => e.to === s.id)).map((s) => s.id)]
+    const without = reach(entries, checkId)
+    const yesTargets = p.edges.filter((e) => e.from === checkId && !/^no$/i.test(e.label ?? '')).map((e) => e.to)
+    const onlyViaYes = new Set([...reach(yesTargets)].filter((id) => !without.has(id)))
+    const i = usual.findIndex((s) => s.id === checkId)
+    const next = usual.slice(i + 1).find((s) => !onlyViaYes.has(s.id))
+    return next ? forward(next.id) : { id: undefined, passed: [] as GuideStep[] }
+  }
+  return { steps, stages, get, forward, afterDeclined, usedIn, total: usualMine.length, start: forward(firstStep(p)).id ?? firstStep(p) }
 }
 export type Guide = ReturnType<typeof buildGuide>
 
@@ -129,11 +154,14 @@ export function useGuide(p: Process, lib: LibraryItem[]) {
   const go = (answer?: 'yes' | 'no') => {
     if (!cur) return
     const nextId = answer === 'no' ? cur.no?.id : cur.yes?.id
-    const { id, passed } = g.forward(nextId)
+    // "No" can end its path straight away: then carry on with the rest of the process (not the "Yes" path)
+    const declined = answer === 'no' && !cur.no && cur.noEnds
+    const { id, passed } = declined ? g.afterDeclined(cur.st.id) : g.forward(nextId)
     const names = [...new Set(passed.map((x) => x.role?.name ?? 'someone else'))]
     setS((x) => {
       const done = [...new Set([...x.done.filter((d) => answer !== 'no' || d !== nextId), cur.st.id, ...passed.map((q) => q.st.id)])]
-      const handoff = passed.length ? `Meanwhile ${names.join(', ')} ${names.length > 1 ? 'do' : 'does'} ${passed.length} step${passed.length > 1 ? 's' : ''}. Here's your next one.` : answer !== 'no' && cur.jump ? cur.jump : ''
+      const handoff = declined && id ? `“${cur.st.answers?.no ?? 'No'}” ends that path. On with the rest of the process.`
+        : passed.length ? `Meanwhile ${names.join(', ')} ${names.length > 1 ? 'do' : 'does'} ${passed.length} step${passed.length > 1 ? 's' : ''}. Here's your next one.` : answer !== 'no' && cur.jump ? cur.jump : ''
       return id ? { ...x, done, cur: id, hist: [...x.hist, cur.st.id], finished: false, handoff } : { ...x, done, hist: [...x.hist, cur.st.id], finished: true, handoff: '' }
     })
   }

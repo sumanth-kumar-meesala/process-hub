@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { ContactShadows, Float, Html, Line, OrbitControls, QuadraticBezierLine } from '@react-three/drei'
+import { ContactShadows, Float, Line, OrbitControls, QuadraticBezierLine } from '@react-three/drei'
+// drei's Html, with its clean-up fixed for React 19 (see the file)
+import { Html } from './Html'
 import * as THREE from 'three'
 import type { Process, Role } from '@/lib/types'
 import { tint } from '@/lib/types'

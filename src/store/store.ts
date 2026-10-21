@@ -63,9 +63,10 @@ const START_PEOPLE: Person[] = [
 export const useData = create<DataState>()(
   persist(
     (setS, getS) => ({
-      processes: SEED,
+      // no sample processes: the processes come from the Signavio BPMN files in the page (Admin → Prepare the page)
+      processes: [],
       people: START_PEOPLE,
-      library: SEED_LIBRARY,
+      library: SEED_LIBRARY.filter((x) => x.category !== 'process'),
       glossary: SEED_GLOSSARY,
       systems: SEED_SYSTEMS,
       setSystems: (systems) => setS({ systems }),
@@ -91,65 +92,81 @@ export const useData = create<DataState>()(
         ps.forEach((p) => { if (p && p.id && p.title && Array.isArray(p.stages)) { getS().upsert(p); n++ } })
         return n
       },
-      resetToStarter: () => setS({ processes: SEED, library: SEED_LIBRARY }),
+      // clears what this browser saved (the Signavio processes in the page come back on the next load)
+      resetToStarter: () => setS({ processes: [], library: SEED_LIBRARY.filter((x) => x.category !== 'process') }),
       setPersonPersona: (id, persona) => setS((s) => ({ people: s.people.map((x) => x.id === id ? { ...x, persona } : x) })),
       addPerson: (name) => setS((s) => ({ people: [...s.people, { id: 'p' + Date.now(), name, note: '', persona: 'performer' }] })),
     }),
     {
       name: 'process-hub-data',
-      version: 10,
+      version: 11,
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ processes: s.processes, people: s.people, library: s.library, glossary: s.glossary, systems: s.systems }),
       // v2 adds the shared resource library: untouched starter processes get the new version,
       // everything else gets library items assigned automatically
       migrate: (old, version) => {
         const st = (old ?? {}) as { processes?: Process[]; people?: Person[]; library?: LibraryItem[]; glossary?: Term[]; systems?: InternalSystem[] }
-        // v10: FS25 steps get drafted "why it matters", "how to do it" and must-have documents (owner's own text is kept)
-        if (version < 10 && st.processes) st.processes = st.processes.map(withGuide)
-        if (version < 4 && !st.glossary) st.glossary = SEED_GLOSSARY
-        if (version < 5 && !st.systems) st.systems = SEED_SYSTEMS
-        if (version < 6 && st.processes) st.processes = st.processes.map(fixStageNames)
-        // v8: the starter processes were reworked with full steps, checks, edge cases, systems and resources —
-        // replace them (a deleted one stays deleted) and add the new library items
-        if (version < 8) {
-          if (st.processes) st.processes = st.processes.map((p) => { const fresh = SEED.find((x) => x.id === p.id); return fresh && p.seeded ? { ...fresh, status: p.status } : p })
-          if (st.library) st.library = [...st.library, ...SEED_LIBRARY.filter((x) => !st.library!.some((y) => y.id === x.id))]
+        // v11: the sample processes are gone — remove them (and the library links to them) from data saved earlier
+        if (version < 11) {
+          const sampleIds = new Set(SEED.map((p) => p.id))
+          const drop = (list?: Process[]) => list?.filter((p) => !p.seeded && !sampleIds.has(p.id))
+          const tidy = (lib?: LibraryItem[]) => lib?.filter((x) => !(x.category === 'process' && x.processId && sampleIds.has(x.processId)))
+          // the older steps below may bring the samples back, so they run first and this is applied at the end
+          const done = migrateOlder(st, version)
+          return { ...done, processes: drop(done.processes) ?? [], library: tidy(done.library) }
         }
-        // v7: starter processes get the newer, more meaningful 3D looks
-        if (version < 7 && st.processes) st.processes = st.processes.map((p) => {
-          const fresh = SEED.find((x) => x.id === p.id)
-          return fresh && p.seeded ? { ...p, stages: p.stages.map((sg) => { const f = fresh.stages.find((x) => x.id === sg.id); return f ? { ...sg, scene: f.scene } : sg }) } : p
-        })
-        // v3: starter processes and people take the placeholder names from the current starter data
-        if (version < 3) {
-          if (st.processes) st.processes = st.processes.map((p) => {
-            const fresh = SEED.find((x) => x.id === p.id)
-            if (!fresh || !p.seeded) return p
-            return { ...p, owner: fresh.owner, executiveOwner: fresh.executiveOwner, summary: fresh.summary,
-              stages: p.stages.map((sg) => { const f = fresh.stages.find((x) => x.id === sg.id); return f ? { ...sg, place: f.place } : sg }) }
-          })
-          if (st.people) st.people = START_PEOPLE.concat(st.people.filter((x) => /^p\d/.test(x.id))) // keep people added in Admin
-        }
-        if (version < 2) {
-          const library = st.library ?? SEED_LIBRARY
-          const processes = (st.processes ?? SEED).map((p) => {
-            const fresh = SEED.find((x) => x.id === p.id)
-            if (fresh && p.seeded && p.updatedAt === fresh.updatedAt) return fresh
-            if (fresh) {
-              // keep the owner's edits, but bring in the curated library links for steps that still exist
-              const steps = p.steps.map((x) => x.resourceIds ? x : { ...x, resourceIds: fresh.steps.find((f) => f.id === x.id)?.resourceIds })
-              p = { ...p, steps, linkedIds: p.linkedIds ?? fresh.linkedIds, resources: p.resources?.length && !fresh.resources.length ? [] : p.resources }
-            }
-            return autoAssign(p, library)
-          })
-          return { ...st, processes, library }
-        }
-        return st
+        return migrateOlder(st, version)
       },
       onRehydrateStorage: () => () => { useData.setState({ hydrated: true }) },
     },
   ),
 )
+
+/** The migrations of versions before 11 (kept so very old saved data still loads). */
+function migrateOlder(st: { processes?: Process[]; people?: Person[]; library?: LibraryItem[]; glossary?: Term[]; systems?: InternalSystem[] }, version: number) {
+  // v10: FS25 steps get drafted "why it matters", "how to do it" and must-have documents (owner's own text is kept)
+  if (version < 10 && st.processes) st.processes = st.processes.map(withGuide)
+  if (version < 4 && !st.glossary) st.glossary = SEED_GLOSSARY
+  if (version < 5 && !st.systems) st.systems = SEED_SYSTEMS
+  if (version < 6 && st.processes) st.processes = st.processes.map(fixStageNames)
+  // v8: the starter processes were reworked with full steps, checks, edge cases, systems and resources —
+  // replace them (a deleted one stays deleted) and add the new library items
+  if (version < 8) {
+    if (st.processes) st.processes = st.processes.map((p) => { const fresh = SEED.find((x) => x.id === p.id); return fresh && p.seeded ? { ...fresh, status: p.status } : p })
+    if (st.library) st.library = [...st.library, ...SEED_LIBRARY.filter((x) => !st.library!.some((y) => y.id === x.id))]
+  }
+  // v7: starter processes get the newer, more meaningful 3D looks
+  if (version < 7 && st.processes) st.processes = st.processes.map((p) => {
+    const fresh = SEED.find((x) => x.id === p.id)
+    return fresh && p.seeded ? { ...p, stages: p.stages.map((sg) => { const f = fresh.stages.find((x) => x.id === sg.id); return f ? { ...sg, scene: f.scene } : sg }) } : p
+  })
+  // v3: starter processes and people take the placeholder names from the current starter data
+  if (version < 3) {
+    if (st.processes) st.processes = st.processes.map((p) => {
+      const fresh = SEED.find((x) => x.id === p.id)
+      if (!fresh || !p.seeded) return p
+      return { ...p, owner: fresh.owner, executiveOwner: fresh.executiveOwner, summary: fresh.summary,
+        stages: p.stages.map((sg) => { const f = fresh.stages.find((x) => x.id === sg.id); return f ? { ...sg, place: f.place } : sg }) }
+    })
+    if (st.people) st.people = START_PEOPLE.concat(st.people.filter((x) => /^p\d/.test(x.id))) // keep people added in Admin
+  }
+  if (version < 2) {
+    const library = st.library ?? SEED_LIBRARY
+    const processes = (st.processes ?? SEED).map((p) => {
+      const fresh = SEED.find((x) => x.id === p.id)
+      if (fresh && p.seeded && p.updatedAt === fresh.updatedAt) return fresh
+      if (fresh) {
+        // keep the owner's edits, but bring in the curated library links for steps that still exist
+        const steps = p.steps.map((x) => x.resourceIds ? x : { ...x, resourceIds: fresh.steps.find((f) => f.id === x.id)?.resourceIds })
+        p = { ...p, steps, linkedIds: p.linkedIds ?? fresh.linkedIds, resources: p.resources?.length && !fresh.resources.length ? [] : p.resources }
+      }
+      return autoAssign(p, library)
+    })
+    return { ...st, processes, library }
+  }
+
+  return st
+}
 
 interface SessionState {
   persona: Persona
@@ -170,7 +187,7 @@ export const useSession = create<SessionState>()(
   persist(
     (setS) => ({
       persona: 'performer',
-      myRole: 'House Supervisor',
+      myRole: '',
       groqKey: '',
       model: 'openai/gpt-oss-120b',
       viewMode: '3d',

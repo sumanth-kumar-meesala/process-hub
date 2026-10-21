@@ -107,7 +107,7 @@ export function StepDetails({ proc, run, gs, compact = false }: { proc: Process;
       {gs.isCheck && (
         <div className={cn('grid gap-2', !compact && 'sm:grid-cols-2')}>
           <div className="rounded-2xl bg-secondary-container/60 px-4 py-2.5"><b className="text-xs uppercase text-secondary">If {gs.st.answers?.yes ?? 'yes'}</b><p className="m-0 mt-0.5 text-sm">Carry on to “{gs.yes?.label ?? 'the end — all done'}”{otherStage(gs.yes)}</p></div>
-          <div className="rounded-2xl bg-tertiary-container px-4 py-2.5"><b className="text-xs uppercase text-tertiary">If {gs.st.answers?.no ?? 'no'}</b><p className="m-0 mt-0.5 text-sm">{gs.no ? `${gs.noBack ? 'Go back to' : 'Go to'} “${gs.no.label}”${otherStage(gs.no)}` : 'Ask the process owner'}</p></div>
+          <div className="rounded-2xl bg-tertiary-container px-4 py-2.5"><b className="text-xs uppercase text-tertiary">If {gs.st.answers?.no ?? 'no'}</b><p className="m-0 mt-0.5 text-sm">{gs.no ? `${gs.noBack ? 'Go back to' : 'Go to'} “${gs.no.label}”${otherStage(gs.no)}` : gs.noEnds ? 'That path ends here — carry on with the rest of the process' : 'Ask the process owner'}</p></div>
         </div>
       )}
       {gs.thenBack && <span className="flex items-center gap-1.5 text-[13px] font-semibold text-tertiary"><Undo2 size={13} />Then back to “{gs.thenBack.label}”{otherStage(gs.thenBack)}</span>}

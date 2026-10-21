@@ -64,7 +64,7 @@ export default function Discover() {
         {starts.length > 0 && !q && (
           <section className="flex flex-col gap-3 rounded-[28px] bg-white p-6 shadow-[0_2px_4px_rgba(21,26,37,.04)]">
             <h2 className="m-0 flex items-center gap-2 text-xl font-extrabold"><Sparkles size={20} className="text-primary" aria-hidden />Not sure where to start? What's happened?</h2>
-            <p className="m-0 text-sm text-on-surface-variant">Pick the one that fits. We'll open the right process and show just your part as {myRole}.</p>
+            <p className="m-0 text-sm text-on-surface-variant">Pick the one that fits. We'll open the right process{myRole ? <> and show just your part as {myRole}</> : ''}.</p>
             <div className="flex flex-wrap gap-2">
               {starts.map(({ p, t }) => {
                 const r = p.roles.find((x) => x.name === myRole)
@@ -91,14 +91,17 @@ export default function Discover() {
             <div className="flex-1" />
             <label className="flex items-center gap-2 text-[13px] text-on-surface-variant">
               I work as
-              <select value={myRole} onChange={(e) => setMyRole(e.target.value)} className="h-9 rounded-full border border-outline-variant bg-white px-3 text-[13px] font-bold text-on-surface">
+              <select value={roles.includes(myRole) ? myRole : ''} onChange={(e) => setMyRole(e.target.value)} className="h-9 rounded-full border border-outline-variant bg-white px-3 text-[13px] font-bold text-on-surface">
+                {!roles.includes(myRole) && <option value="">Choose your role…</option>}
                 {roles.map((r) => <option key={r}>{r}</option>)}
               </select>
             </label>
           </div>
 
           <div className="flex flex-col gap-2.5">
-            {visible.length === 0 && <p className="rounded-[20px] bg-white p-6 text-on-surface-variant">No process matches “{q}”. Try fewer words.</p>}
+            {visible.length === 0 && (q
+              ? <p className="rounded-[20px] bg-white p-6 text-on-surface-variant">No process matches “{q}”. Try fewer words.</p>
+              : <p className="rounded-[20px] bg-white p-6 text-on-surface-variant">No processes yet. A Global Admin adds them from Signavio: <b>Admin → Processes → Prepare the page</b>.</p>)}
             {visible.map((p) => {
               const a = AREA_ICON[p.area] ?? { icon: Box, bg: '#E5E8F2', fg: '#151A25' }
               const Icon = a.icon

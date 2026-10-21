@@ -171,7 +171,7 @@ function Processes() {
         <Button asChild><Link to="/builder" className="no-underline"><Plus size={16} />New process</Link></Button>
       </div>
       <Signavio />
-      <p className="m-0 text-[13px] text-on-surface-variant">The five starter processes come with the app. Changes and new processes are saved in this browser — export them and add the file to the repo (src/data) to share them with everyone.</p>
+      <p className="m-0 text-[13px] text-on-surface-variant">The processes come from the Signavio BPMN files in this page (above). Processes made or changed in the Builder are saved in this browser only — use Export all to keep them.</p>
       {note && <p className="m-0 text-sm font-semibold text-secondary">{note}</p>}
       <div>
         {processes.map((p) => (
@@ -183,7 +183,7 @@ function Processes() {
           </div>
         ))}
       </div>
-      <div className="self-start"><ConfirmButton label="Reset to starter processes" question="Replace everything with the five starter processes?" confirmLabel="Reset" icon={<RotateCcw size={16} />} onConfirm={() => { resetToStarter(); setNote('Back to the five starter processes.') }} /></div>
+      <div className="self-start"><ConfirmButton label="Clear what this browser saved" question="Remove the processes saved in this browser? (The Signavio processes in the page come back when it reloads.)" confirmLabel="Clear" icon={<RotateCcw size={16} />} onConfirm={() => { resetToStarter(); setNote('Cleared. Reload the page to load the Signavio processes again.') }} /></div>
     </Card>
   )
 }
