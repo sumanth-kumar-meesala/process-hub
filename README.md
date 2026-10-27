@@ -36,46 +36,59 @@ BPMN files are **never** committed to this repo (`.gitignore`).
 
 ## Deploy (in this order)
 
+Deploying takes about an hour. Each step has exact click paths; the labels match Microsoft's current UI (October 2026).
+
 ### 0. Check nothing is blocked (5 minutes)
-- Open Excel for the web. Is there an **Automate** tab? If yes, Office Scripts is available.
-- Open <https://make.powerautomate.com> and <https://make.powerapps.com>. Can you create a flow and an app?
-- In your SharePoint site, can you create a list? Try **+ New → List**, then cancel. If not, ask the site owner to run step 1 for you. That's a site-owner task, not an admin one.
+| Check | How | If it fails |
+| --- | --- | --- |
+| Office Scripts | Open any workbook in Excel **in the browser**. Is there an **Automate** tab in the ribbon? | Enable **third-party cookies** for the site in your browser (Microsoft's documented fix). If it's still missing, your admin has turned off Office Scripts, and this design won't work |
+| Power Automate | <https://make.powerautomate.com> → **Create**: can you see **Automated cloud flow**? | Your licence doesn't include Power Automate. Ask IT for a licence (not admin rights) |
+| Power Apps | <https://make.powerapps.com> → **Create** → **Create from blank**: does it open? | Same as above |
+| Create a list | On your SharePoint site: **+ New** → **List**. Does the *Create a list* dialog open? (Then close it) | Ask the **site owner** to do step 1.2 for you. It's a one-off site-owner task, not an admin one |
 
 ### 1. Folder and list
-1. In the document library, create a folder **Processes**. Upload a test `.bpmn` file later.
-2. Create the **Processes** list: open the site, press **F12 → Console**, paste all of `setup/create-list.js` and press Enter. Wait for *Done*.
+1. **Folder:** open your document library → **+ New** → **Folder** → name it `Processes` → **Create**.
+2. **List:** open any page of the site in Edge or Chrome → press **F12** → **Console** tab → paste all of [`setup/create-list.js`](setup/create-list.js) → **Enter**. (If the console says pasting is blocked, type `allow pasting`, press Enter, then paste again.) Wait for **Done**, then refresh **Site contents**: a list called **Processes** is there.
 
-<details><summary>Create the list by hand (if the console is blocked)</summary>
+<details><summary>Create the list by hand (if F12 / the console is blocked)</summary>
 
-**Site contents → + New → List → Blank list**, name it `Processes`. Then add these columns. The names must match exactly.
+1. On the site: **+ New** → **List** → **Blank list** → **Name:** `Processes` → **Create**.
+2. For each column below: click **+ Add column** → pick the type → **Next** → type the **Name** exactly as shown → **Save**.
 
-| Column | Type |
-| --- | --- |
-| Code | Single line of text |
-| FileId | Single line of text (column settings → *Indexed*: yes, via List settings → Indexed columns) |
-| FileName | Single line of text |
-| FileUrl | Multiple lines of text (plain) |
-| Owner | Single line of text |
-| Summary | Multiple lines of text (plain) |
-| StepCount | Number (0 decimals) |
-| Status | Single line of text |
-| Message | Multiple lines of text (plain) |
-| Data | Multiple lines of text (**plain text**, not rich text) |
+| Name | Type | Notes |
+| --- | --- | --- |
+| Code | Single line of text | |
+| FileId | Single line of text | |
+| FileName | Single line of text | |
+| FileUrl | Multiple lines of text | |
+| Owner | Single line of text | |
+| Summary | Multiple lines of text | |
+| StepCount | Number | |
+| Status | Single line of text | |
+| Message | Multiple lines of text | |
+| Data | Multiple lines of text | Leave **Use enhanced rich text** OFF (under *More options*). It must be plain text |
+
+3. Index FileId: **Settings** (gear) → **List settings** → **Indexed columns** → **Create a new index** → **FileId** → **Create**.
 </details>
 
-### 2. An empty workbook for the script
-In the same library, create an empty Excel workbook named **ProcessParser.xlsx**. The flow's *Run script* action needs a workbook to open; the script doesn't change it.
+### 2. The workbook the script runs in
+In the same document library: **+ New** → **Excel workbook**. Rename it to `ProcessParser` (top of the Excel window, click the file name). The flow's *Run script* action needs a workbook to open; the script doesn't change it.
 
 ### 3. The Office Script
-1. Open **ProcessParser.xlsx** in Excel for the web → **Automate** → **New script**.
-2. Delete the sample code, paste all of `office-script/parseBpmn.ts`, rename the script (click its name) to **parseBpmn**, and **Save**.
+1. Open **ProcessParser.xlsx** in the browser → **Automate** tab → **New Script** → **Create in Code Editor**.
+2. The Code Editor opens on the right with sample code. Select all of it (Ctrl+A) and delete it.
+3. Open [`office-script/parseBpmn.ts`](office-script/parseBpmn.ts) on GitHub → **Raw** → Ctrl+A, Ctrl+C → paste into the Code Editor.
+4. Click the script's name at the top of the Code Editor (e.g. *Script 1*) and rename it to `parseBpmn`.
+5. Click **Save Script**. Excel saves it to your OneDrive (`Documents › Office Scripts`), which is where the flow's *Run script* action looks.
+
+> Do this with the **same account** that will own the flows.
 
 ### 4. The flows
-Follow `flow/README.md`: **Sync processes** (on file add/change) and **Remove deleted processes** (daily).
-Test: upload a Signavio `.bpmn` file to `/Processes`. Within about a minute, a row appears in **Processes** with `Status = OK`.
+Follow [`flow/README.md`](flow/README.md): **Sync processes** (on file add/change) and **Remove deleted processes** (daily).
+Test: upload a Signavio `.bpmn` file to **Processes**. Within about a minute, a row appears in the **Processes** list with `Status = OK`.
 
 ### 5. The app and the page
-Follow `powerapps/README.md`: create the canvas app, paste the timeline controls, publish, share, and add it to your page with the **Power Apps** web part.
+Follow [`powerapps/README.md`](powerapps/README.md): create the canvas app, paste the timeline controls, publish, share, and add it to your page with the **Power Apps** web part.
 
 ---
 
@@ -105,3 +118,9 @@ Follow `powerapps/README.md`: create the canvas app, paste the timeline controls
 node test/check.mjs "/path/to/FS07 - ….bpmn" "/path/to/FS11 - ….bpmn"
 ```
 This runs the Office Script against real files, which stay outside the repo, plus a built-in mini diagram. It prints the timeline as text and asserts the basics: roles, decisions, escaping, and size under the 60,000-character column limit.
+
+## Sources (Microsoft documentation the steps are based on)
+- [Office Scripts tutorial: New Script › Create in Code Editor, Save Script, Run script action](https://learn.microsoft.com/office/dev/scripts/tutorials/excel-power-automate-manual)
+- [Office Scripts platform limits and the missing Automate tab](https://learn.microsoft.com/office/dev/scripts/testing/platform-limits)
+- [Power Automate cloud flows designer](https://learn.microsoft.com/power-automate/flows-designer) · [SharePoint connector](https://learn.microsoft.com/connectors/sharepointonline/)
+- [Power Apps: create a blank canvas app](https://learn.microsoft.com/power-apps/maker/canvas-apps/create-blank-app) · [code view paste](https://learn.microsoft.com/power-apps/maker/canvas-apps/code-view) · [Power Apps web part](https://support.microsoft.com/office/use-the-power-apps-web-part-6285f05e-e441-408a-99d7-aa688195cd1c)
