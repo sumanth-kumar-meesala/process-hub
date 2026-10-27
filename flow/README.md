@@ -90,6 +90,8 @@ After you pick the script, two more fields appear (they come from the script's p
 
 > **If the File field can't find ProcessParser.xlsx:** the workbook is probably sitting in your personal OneDrive instead of the site (easy to do by accident — see the note in step 2 of the main README). Either change **Location** above to **OneDrive for Business** and browse to it there, or move the file into the site's document library and keep **Location** as **SharePoint Site**.
 
+> **If the xml / fileName fields never appear below Script:** Power Automate caches a script's parameters on the step **at the moment you add it**, so if the step was added before the script's current parameters existed, it keeps showing the old (empty) signature. Delete this **Run script** card (**⋯** → **Delete**) and add a fresh one, filling in Location/Document Library/File/Script again — the xml and fileName fields then appear. ([Microsoft: script parameter fields not appearing](https://learn.microsoft.com/office/dev/scripts/testing/power-automate-troubleshooting#script-parameter-fields-or-returned-output-not-appearing-in-power-automate))
+
 ### Step 6: *Compose*, renamed `Parsed`
 **Inputs** → **Insert expression**:
 ```
