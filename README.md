@@ -74,6 +74,8 @@ Deploying takes about an hour. Each step has exact click paths; the labels match
 ### 2. The workbook the script runs in
 In the same document library: **+ New** → **Excel workbook**. Rename it to `ProcessParser` (top of the Excel window, click the file name). The flow's *Run script* action needs a workbook to open; the script doesn't change it.
 
+> **Create it from inside the library, not from Excel's own "New blank workbook" or onedrive.com.** Either of those saves the file to your personal OneDrive (`…-my.sharepoint.com/personal/…`) instead of the site, and the flow's *Run script* step then can't find it under **Location → SharePoint Site**. If that's already happened: move the file from OneDrive into this library (select it → **Move to** → pick the site and library), or change the step's **Location** to **OneDrive for Business** instead.
+
 ### 3. The Office Script
 1. Open **ProcessParser.xlsx** in the browser → **Automate** tab → **New Script** → **Create in Code Editor**.
 2. The Code Editor opens on the right with sample code. Select all of it (Ctrl+A) and delete it.

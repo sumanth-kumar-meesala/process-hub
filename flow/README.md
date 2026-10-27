@@ -88,6 +88,8 @@ After you pick the script, two more fields appear (they come from the script's p
 
 > **Run script** only lists scripts saved in **your own** OneDrive (`Documents › Office Scripts`), which is where Excel saves them by default. If **parseBpmn** isn't listed, check you're signed in to Power Automate with the same account you used in Excel.
 
+> **If the File field can't find ProcessParser.xlsx:** the workbook is probably sitting in your personal OneDrive instead of the site (easy to do by accident — see the note in step 2 of the main README). Either change **Location** above to **OneDrive for Business** and browse to it there, or move the file into the site's document library and keep **Location** as **SharePoint Site**.
+
 ### Step 6: *Compose*, renamed `Parsed`
 **Inputs** → **Insert expression**:
 ```
