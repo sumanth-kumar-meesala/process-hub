@@ -11,6 +11,13 @@ if (!files.length) { console.log('usage: node test/check.mjs <file.bpmn>…'); p
 
 // the Office Script has no exports: copy it with one added, then import it
 const src = readFileSync(new URL('../office-script/parseBpmn.ts', import.meta.url), 'utf8')
+
+// Office Scripts rules the Code Editor enforces (learn.microsoft.com/office/dev/scripts/develop/typescript-restrictions):
+// array callbacks must be inline arrow functions, no `any`, no eval, no reserved identifiers
+const ARRAY_FN = /\.(map|filter|find|findIndex|some|every|forEach|reduce|sort)\(\s*(function\b|[A-Za-z_$][\w$]*\s*[,)])/
+assert.ok(!ARRAY_FN.test(src), `array callback must be an arrow function: ${src.match(ARRAY_FN)?.[0]}`)
+assert.ok(!/:\s*any\b|<any>|\bas any\b/.test(src), 'no `any` type')
+assert.ok(!/\beval\(|\bconsole\b/.test(src), 'no eval / console')
 const tmp = join(mkdtempSync(join(tmpdir(), 'parse-')), 'parseBpmn.ts')
 writeFileSync(tmp, src + '\nexport { main }\n')
 const { main } = await import(tmp)

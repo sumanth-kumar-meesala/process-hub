@@ -83,6 +83,8 @@ In the same document library: **+ New** → **Excel workbook**. Rename it to `Pr
 
 > Do this with the **same account** that will own the flows.
 
+**If the Code Editor shows an error:** make sure you pasted the **latest** version of the file (from the Raw view, replacing *all* the sample code), then save again. The script follows Microsoft's [Office Scripts TypeScript restrictions](https://learn.microsoft.com/office/dev/scripts/develop/typescript-restrictions): arrow functions in array callbacks, no `any`, TypeScript 4.0.3 features only. If an error remains, note the line number shown in the editor and report it.
+
 ### 4. The flows
 Follow [`flow/README.md`](flow/README.md): **Sync processes** (on file add/change) and **Remove deleted processes** (daily).
 Test: upload a Signavio `.bpmn` file to **Processes**. Within about a minute, a row appears in the **Processes** list with `Status = OK`.

@@ -164,7 +164,7 @@ function parse(xml: string, fileName: string): Result {
     for (let p = n.parent; p; p = p.parent) if (tags.indexOf(p.tag) >= 0) return p
     return null
   }
-  const isExpanded = (n: XNode): boolean => SUBS.indexOf(n.tag) >= 0 && n.kids.some(isFlowNode)
+  const isExpanded = (n: XNode): boolean => SUBS.indexOf(n.tag) >= 0 && n.kids.some((x) => isFlowNode(x))
   const outOf = (id: string): Flow[] => flows.filter((f) => f.from === id)
   const roleOf = (n: XNode): string => {
     if (lane[n.attrs.id]) return lane[n.attrs.id]
@@ -182,7 +182,7 @@ function parse(xml: string, fileName: string): Result {
     ((n.tag === 'intermediateCatchEvent' || n.tag === 'intermediateThrowEvent') && !!nameOf(n))
   const all: XNode[] = []
   walk(root, (n) => { if (isFlowNode(n)) all.push(n) })
-  const steps = all.filter(isStep)
+  const steps = all.filter((x) => isStep(x))
   if (!steps.length) throw new Error('no tasks were found in the diagram')
 
   // reading order: by column (left edge), then top to bottom
@@ -326,7 +326,7 @@ function parse(xml: string, fileName: string): Result {
     const inStage = ordered.filter((s) => stageKey[s.attrs.id] === key)
     const color = PALETTE[si % PALETTE.length]
     const sub = key.charAt(0) === 's' ? byId[key.slice(1)] : null
-    const about = sub ? describes(sub).map(noteText).find(isDescription) || '' : ''
+    const about = sub ? describes(sub).map((x) => noteText(x)).find((x) => isDescription(x)) || '' : ''
     rows.push(Object.assign(blank(), { k: 'stage', s: si, num: String(si + 1), color, count: inStage.length,
       title: cut(stageName[key] || stepTitle(inStage.find((s) => GATEWAYS.indexOf(s.tag) < 0) || inStage[0]), 70),
       how: tidy(about.replace(/^process\s*description\s*:\s*/i, '')) }))
@@ -342,7 +342,7 @@ function parse(xml: string, fileName: string): Result {
       }
       const whatIf: Branch[] = all
         .filter((b) => b.tag === 'boundaryEvent' && b.attrs.attachedToRef === s.attrs.id)
-        .map((b) => ({ label: nameOf(b) || 'If something goes wrong', to: outOf(b.attrs.id).reduce((acc: Target[], f) => acc.concat(resolve(f.to, {})), []).map(label).join('; ') || '—' }))
+        .map((b) => ({ label: nameOf(b) || 'If something goes wrong', to: outOf(b.attrs.id).reduce((acc: Target[], f) => acc.concat(resolve(f.to, {})), []).map((x) => label(x)).join('; ') || '—' }))
       rows.push(Object.assign(blank(), {
         k: isDecision ? 'decision' : s.tag === 'serviceTask' || s.tag === 'scriptTask' ? 'auto' : s.tag.indexOf('Event') > 0 ? 'event' : 'task',
         s: si, num: `${si + 1}.${j + 1}`, title: stepTitle(s), color, role,
@@ -357,12 +357,12 @@ function parse(xml: string, fileName: string): Result {
 
   // ---------- the process as a whole ----------
   const topLevel = (n: XNode): boolean => !enclosing(n, SUBS)
-  const triggers = all.filter((n) => n.tag === 'startEvent' && topLevel(n)).map(nameOf).filter((x) => x)
-  const outcomes = all.filter((n) => n.tag === 'endEvent' && topLevel(n)).map(nameOf).filter((x) => x)
-  const top = describes(null).map(noteText)
-  const anywhere = freeNotes.map(noteText)
-  const header = top.find(isHeader) || anywhere.find(isHeader) || ''
-  const described = top.find(isDescription) || anywhere.find(isDescription) || ''
+  const triggers = all.filter((n) => n.tag === 'startEvent' && topLevel(n)).map((x) => nameOf(x)).filter((x) => x)
+  const outcomes = all.filter((n) => n.tag === 'endEvent' && topLevel(n)).map((x) => nameOf(x)).filter((x) => x)
+  const top = describes(null).map((x) => noteText(x))
+  const anywhere = freeNotes.map((x) => noteText(x))
+  const header = top.find((x) => isHeader(x)) || anywhere.find((x) => isHeader(x)) || ''
+  const described = top.find((x) => isDescription(x)) || anywhere.find((x) => isDescription(x)) || ''
   const defs = root.kids.find((k) => k.tag === 'definitions') || root
   const diagramMeta = (key: string): string => {
     let v = ''
@@ -425,10 +425,10 @@ function render(r: Result, max: number): string {
   const rows: OutRow[] = r.rows.map((row) => {
     const parts: string[] = []
     if (row.how) parts.push(`<h4>${row.k === 'stage' ? 'About this stage' : 'How to do it'}</h4>${para(row.how)}`)
-    if (row.notes.length) parts.push(`<h4>Notes</h4>${row.notes.map(para).join('')}`)
+    if (row.notes.length) parts.push(`<h4>Notes</h4>${row.notes.map((x) => para(x)).join('')}`)
     if (row.docs.length) parts.push(`<h4>Documents</h4>${list(row.docs.map((d) => d.url ? `<a href="${esc(d.url)}" target="_blank">${esc(d.name)}</a>` : esc(d.name)))}`)
-    if (row.branches.length) parts.push(`<h4>${row.k === 'decision' ? 'Which way?' : 'What happens next'}</h4>${list(row.branches.map(branch))}`)
-    if (row.whatIf.length) parts.push(`<h4>What if…</h4>${list(row.whatIf.map(branch))}`)
+    if (row.branches.length) parts.push(`<h4>${row.k === 'decision' ? 'Which way?' : 'What happens next'}</h4>${list(row.branches.map((x) => branch(x)))}`)
+    if (row.whatIf.length) parts.push(`<h4>What if…</h4>${list(row.whatIf.map((x) => branch(x)))}`)
     return {
       n: row.n, k: row.k, s: row.s, num: row.num, title: row.title, color: row.color, role: row.role, count: row.count,
       hint: row.k === 'decision' ? cut(row.branches.map((b) => `${b.label} → ${b.to}`).join(' · '), 160) : '',
