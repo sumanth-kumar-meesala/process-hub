@@ -71,6 +71,21 @@ Deploying takes about an hour. Each step has exact click paths; the labels match
 3. Index FileId: **Settings** (gear) → **List settings** → **Indexed columns** → **Create a new index** → **FileId** → **Create**.
 </details>
 
+<details><summary>403 / Access Denied creating the list? Create it under "My lists" instead</summary>
+
+Creating a **new** list — by script or by hand — needs **Manage Lists** permission on the site, which plain edit access doesn't include. You don't need the site owner for this: you always have full owner rights over your own OneDrive, so create the list there instead and share just that one list yourself.
+
+1. Go to <https://lists.microsoft.com> directly (not from inside the team site) → **+ New list** → **Blank list**.
+2. Name it `Processes`. Under **Save to**, leave it as **My lists** (don't pick the team site).
+3. **Create**, then add the columns — paste [`setup/create-list.js`](setup/create-list.js) into the console again (it'll work now, since you own this list) or add them by hand from the table above.
+4. **Share it for read access**, since by default only you can see it: open the list → gear icon → **List settings** → **Permissions for this list** → **Stop Inheriting Permissions** → **Grant Permissions** → add `Everyone except external users` (or your company group) with **Read**.
+5. Note this list's **site address** — it looks like `https://yourcompany-my.sharepoint.com/personal/you_yourcompany_com`. Use that exact address as **Site Address** everywhere a step or connection asks for it: `Find row`, `Create row`, `Update row`, and `All rows` in the cleanup flow, plus the SharePoint connection in Power Apps.
+
+**Trade-off:** this ties the list to your personal account — if it's ever removed, the page breaks until someone recreates it under another account. Fine to get unblocked now; worth moving to the team site later if you get Manage Lists there.
+
+If `lists.microsoft.com` is also blocked by policy, the data can instead live as an Excel table inside `ProcessParser.xlsx`, which only needs the file-edit rights you already have in the library — ask and this README can be extended for that path.
+</details>
+
 ### 2. The workbook the script runs in
 In the same document library: **+ New** → **Excel workbook**. Rename it to `ProcessParser` (top of the Excel window, click the file name). The flow's *Run script* action needs a workbook to open; the script doesn't change it.
 
