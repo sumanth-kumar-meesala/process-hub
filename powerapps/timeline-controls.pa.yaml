@@ -1,0 +1,414 @@
+# Timeline screen controls for Power Apps Studio (canvas app, Tablet 1366 × 768).
+# Copy everything below this comment block, click the blank screen in Studio, and press Ctrl+V.
+# Before pasting: add the SharePoint list "Processes" as a data source.
+# After pasting: set the screen's OnVisible to  Select(btnLoad)  and Fill to  RGBA(250, 250, 250, 1)
+# If Studio rejects the paste, see powerapps/README.md → "Build by hand".
+- btnLoad:
+    Control: Classic/Button@2.2.0
+    Properties:
+      Visible: =false
+      Text: ="Load"
+      OnSelect: |-
+        =Set(varProc, IfError(ParseJSON(cmbProcess.Selected.Data), Blank()));
+        ClearCollect(colRows,
+            ForAll(Table(varProc.rows) As r, {
+                n: Value(r.Value.n), k: Text(r.Value.k), s: Value(r.Value.s), num: Text(r.Value.num),
+                title: Text(r.Value.title), color: Text(r.Value.color), role: Text(r.Value.role),
+                count: Value(r.Value.count), hint: Text(r.Value.hint), detail: Text(r.Value.detail)
+            }));
+        ClearCollect(colRoles, {Value: "Everyone"});
+        Collect(colRoles, ForAll(Table(varProc.roles) As x, {Value: Text(x.Value)}));
+        Set(varStarts, Concat(Table(varProc.triggers) As x, Text(x.Value), "  ·  "));
+        Set(varDone, Concat(Table(varProc.outcomes) As x, Text(x.Value), "  ·  "));
+        Set(varRole, "");
+        Set(varOpen, 0);
+        Set(varAll, false);
+        Set(varSel, 0);
+        Reset(drpRole);
+        Reset(txtSearch)
+
+# ---------- top bar ----------
+- cmbProcess:
+    Control: Classic/ComboBox@2.4.0
+    Properties:
+      X: =16
+      Y: =12
+      Width: =520
+      Height: =40
+      Items: =Sort(Processes, Title)
+      DisplayFields: =["Title"]
+      SearchFields: =["Title", "Code"]
+      SelectMultiple: =false
+      InputTextPlaceholder: ="Find a process"
+      DefaultSelectedItems: =If(IsBlank(Param("code")), FirstN(Sort(Processes, Title), 1), Filter(Processes, Code = Param("code")))
+      OnChange: =Select(btnLoad)
+      BorderColor: =RGBA(209, 209, 209, 1)
+      Font: =Font.'Segoe UI'
+      Size: =12
+- drpRole:
+    Control: Classic/DropDown@2.3.1
+    Properties:
+      X: =552
+      Y: =12
+      Width: =320
+      Height: =40
+      Items: =colRoles
+      Default: ="Everyone"
+      OnChange: =Set(varRole, If(drpRole.Selected.Value = "Everyone", "", drpRole.Selected.Value))
+      BorderColor: =RGBA(209, 209, 209, 1)
+      Fill: =RGBA(255, 255, 255, 1)
+      Color: =RGBA(36, 36, 36, 1)
+      Font: =Font.'Segoe UI'
+      Size: =12
+- txtSearch:
+    Control: Classic/TextInput@2.3.2
+    Properties:
+      X: =888
+      Y: =12
+      Width: =462
+      Height: =40
+      Default: =""
+      HintText: ="Find a step, person or document"
+      DelayOutput: =true
+      BorderColor: =RGBA(209, 209, 209, 1)
+      Font: =Font.'Segoe UI'
+      Size: =12
+
+# ---------- left: the timeline ----------
+- recLeft:
+    Control: Rectangle@2.3.0
+    Properties:
+      X: =16
+      Y: =68
+      Width: =440
+      Height: =684
+      Fill: =RGBA(255, 255, 255, 1)
+      BorderColor: =RGBA(224, 224, 224, 1)
+      BorderThickness: =1
+- lblStarts:
+    Control: Label@2.5.1
+    Properties:
+      X: =32
+      Y: =76
+      Width: =312
+      Height: =44
+      Text: |-
+        ="Starts when: " & If(IsBlank(varStarts), "—", varStarts)
+      Font: =Font.'Segoe UI'
+      Size: =10
+      Color: =RGBA(97, 97, 97, 1)
+      VerticalAlign: =VerticalAlign.Middle
+      Tooltip: =varStarts
+- btnOpenAll:
+    Control: Classic/Button@2.2.0
+    Properties:
+      X: =352
+      Y: =82
+      Width: =88
+      Height: =32
+      Text: =If(varAll, "Close all", "Open all")
+      OnSelect: =Set(varAll, !varAll)
+      Fill: =RGBA(255, 255, 255, 1)
+      Color: =RGBA(36, 36, 36, 1)
+      BorderColor: =RGBA(209, 209, 209, 1)
+      BorderThickness: =1
+      HoverFill: =RGBA(245, 245, 245, 1)
+      HoverColor: =RGBA(36, 36, 36, 1)
+      PressedFill: =RGBA(235, 235, 235, 1)
+      RadiusTopLeft: =16
+      RadiusTopRight: =16
+      RadiusBottomLeft: =16
+      RadiusBottomRight: =16
+      Font: =Font.'Segoe UI'
+      Size: =10
+- galTimeline:
+    Control: Gallery@2.15.0
+    Variant: Vertical
+    Properties:
+      X: =24
+      Y: =124
+      Width: =424
+      Height: =576
+      TemplateSize: =64
+      TemplatePadding: =0
+      ShowScrollbar: =true
+      Items: |-
+        =Filter(colRows,
+            If(IsBlank(txtSearch.Text),
+                k = "stage" || varAll || s = varOpen,
+                k <> "stage" && (txtSearch.Text in title || txtSearch.Text in role || txtSearch.Text in detail)))
+      OnSelect: |-
+        =If(ThisItem.k = "stage",
+            Set(varOpen, If(varOpen = ThisItem.s && !varAll, -1, ThisItem.s)); Set(varAll, false));
+        Set(varSel, ThisItem.n)
+    Children:
+      - recRow:
+          Control: Rectangle@2.3.0
+          Properties:
+            X: =0
+            Y: =2
+            Width: =Parent.TemplateWidth - 8
+            Height: =Parent.TemplateHeight - 4
+            Fill: =If(ThisItem.n = varSel, ColorFade(ColorValue(ThisItem.color), 0.88), RGBA(0, 0, 0, 0))
+            OnSelect: =Select(Parent)
+      - recLine:
+          Control: Rectangle@2.3.0
+          Properties:
+            X: =23
+            Y: =0
+            Width: =2
+            Height: =Parent.TemplateHeight
+            Visible: =ThisItem.k <> "stage" && IsBlank(txtSearch.Text)
+            Fill: =ColorFade(ColorValue(ThisItem.color), 0.55)
+      - btnBadge:
+          Control: Classic/Button@2.2.0
+          Properties:
+            X: =If(ThisItem.k = "stage", 4, 12)
+            Y: =If(ThisItem.k = "stage", 12, 20)
+            Width: =If(ThisItem.k = "stage", 40, 24)
+            Height: =If(ThisItem.k = "stage", 40, 24)
+            Text: =If(ThisItem.k = "stage", ThisItem.num, ThisItem.k = "decision", "?", ThisItem.k = "auto", "⚙", "")
+            OnSelect: =Select(Parent)
+            Fill: |-
+              =If(ThisItem.k = "stage",
+                  If(!IsBlank(varRole) && CountIf(colRows, s = ThisItem.s && k <> "stage" && role = varRole) = 0, RGBA(224, 224, 224, 1), ColorValue(ThisItem.color)),
+                  If(ThisItem.n = varSel, ColorValue(ThisItem.color), RGBA(255, 255, 255, 1)))
+            Color: =If(ThisItem.k = "stage" || ThisItem.n = varSel, RGBA(255, 255, 255, 1), ColorValue(ThisItem.color))
+            HoverFill: =Self.Fill
+            HoverColor: =Self.Color
+            PressedFill: =Self.Fill
+            BorderColor: =ColorValue(ThisItem.color)
+            BorderThickness: =If(ThisItem.k = "stage", 0, 2)
+            RadiusTopLeft: =If(ThisItem.k = "stage", 10, 12)
+            RadiusTopRight: =If(ThisItem.k = "stage", 10, 12)
+            RadiusBottomLeft: =If(ThisItem.k = "stage", 10, 12)
+            RadiusBottomRight: =If(ThisItem.k = "stage", 10, 12)
+            Font: =Font.'Segoe UI'
+            FontWeight: =FontWeight.Bold
+            Size: =If(ThisItem.k = "stage", 13, 9)
+            PaddingLeft: =0
+            PaddingRight: =0
+      - lblKicker:
+          Control: Label@2.5.1
+          Properties:
+            X: =56
+            Y: =6
+            Width: =Parent.TemplateWidth - 96
+            Height: =16
+            Visible: =ThisItem.k = "stage"
+            Text: ="STAGE " & ThisItem.num
+            Color: =ColorValue(ThisItem.color)
+            Font: =Font.'Segoe UI'
+            FontWeight: =FontWeight.Bold
+            Size: =8
+      - lblTitle:
+          Control: Label@2.5.1
+          Properties:
+            X: =If(ThisItem.k = "stage", 56, 44)
+            Y: =If(ThisItem.k = "stage", 20, 4)
+            Width: =Parent.TemplateWidth - Self.X - If(ThisItem.k = "stage", 40, 12)
+            Height: =If(ThisItem.k = "stage", 22, 38)
+            Text: =If(IsBlank(txtSearch.Text) || ThisItem.k = "stage", "", ThisItem.num & "  ") & ThisItem.title
+            Tooltip: =ThisItem.title
+            Color: =If(ThisItem.k <> "stage" && !IsBlank(varRole) && ThisItem.role <> varRole, RGBA(138, 138, 138, 1), RGBA(36, 36, 36, 1))
+            Font: =Font.'Segoe UI'
+            FontWeight: =If(ThisItem.k = "stage" || ThisItem.n = varSel, FontWeight.Semibold, FontWeight.Normal)
+            Size: =If(ThisItem.k = "stage", 12, 10.5)
+            VerticalAlign: =VerticalAlign.Top
+            Wrap: =true
+      - lblSub:
+          Control: Label@2.5.1
+          Properties:
+            X: =If(ThisItem.k = "stage", 56, 44)
+            Y: =If(ThisItem.k = "stage", 42, 42)
+            Width: =Parent.TemplateWidth - Self.X - 12
+            Height: =18
+            Text: |-
+              =If(ThisItem.k = "stage",
+                  ThisItem.count & " steps" & If(IsBlank(varRole), "", "  ·  " & CountIf(colRows, s = ThisItem.s && k <> "stage" && role = varRole) & " for " & varRole),
+                  ThisItem.role & If(IsBlank(ThisItem.hint), "", "  ·  " & ThisItem.hint))
+            Tooltip: =Self.Text
+            Color: =RGBA(97, 97, 97, 1)
+            Font: =Font.'Segoe UI'
+            Size: =9
+      - icoChevron:
+          Control: Classic/Icon@2.5.0
+          Properties:
+            X: =Parent.TemplateWidth - 36
+            Y: =22
+            Width: =20
+            Height: =20
+            Visible: =ThisItem.k = "stage" && IsBlank(txtSearch.Text)
+            Icon: =If(varAll || varOpen = ThisItem.s, Icon.ChevronUp, Icon.ChevronDown)
+            Color: =RGBA(97, 97, 97, 1)
+            OnSelect: =Select(Parent)
+- lblDone:
+    Control: Label@2.5.1
+    Properties:
+      X: =32
+      Y: =704
+      Width: =408
+      Height: =44
+      Text: |-
+        ="Done when: " & If(IsBlank(varDone), "—", varDone)
+      Tooltip: =varDone
+      Font: =Font.'Segoe UI'
+      Size: =10
+      Color: =RGBA(97, 97, 97, 1)
+      VerticalAlign: =VerticalAlign.Middle
+
+# ---------- right: the chosen step ----------
+- recRight:
+    Control: Rectangle@2.3.0
+    Properties:
+      X: =472
+      Y: =68
+      Width: =878
+      Height: =684
+      Fill: =RGBA(255, 255, 255, 1)
+      BorderColor: =RGBA(224, 224, 224, 1)
+      BorderThickness: =1
+- lblStage:
+    Control: Label@2.5.1
+    Properties:
+      X: =496
+      Y: =84
+      Width: =560
+      Height: =20
+      Text: |-
+        =With({r: LookUp(colRows, n = varSel)}, "STAGE " & r.s + 1 & "  ·  " & LookUp(colRows, k = "stage" && s = r.s).title)
+      Color: =ColorValue(LookUp(colRows, n = varSel).color)
+      Font: =Font.'Segoe UI'
+      FontWeight: =FontWeight.Bold
+      Size: =9
+- lblOwner:
+    Control: Label@2.5.1
+    Properties:
+      X: =1064
+      Y: =84
+      Width: =270
+      Height: =20
+      Align: =Align.Right
+      Text: |-
+        ="Owner: " & Coalesce(cmbProcess.Selected.Owner, "—")
+      Color: =RGBA(97, 97, 97, 1)
+      Font: =Font.'Segoe UI'
+      Size: =9
+- lblStepTitle:
+    Control: Label@2.5.1
+    Properties:
+      X: =496
+      Y: =106
+      Width: =838
+      Height: =64
+      Text: |-
+        =With({r: LookUp(colRows, n = varSel)}, If(r.k = "stage", r.title, r.num & "  " & r.title))
+      Color: =RGBA(36, 36, 36, 1)
+      Font: =Font.'Segoe UI'
+      FontWeight: =FontWeight.Semibold
+      Size: =17
+      VerticalAlign: =VerticalAlign.Top
+      Wrap: =true
+- lblRole:
+    Control: Label@2.5.1
+    Properties:
+      X: =496
+      Y: =172
+      Width: =838
+      Height: =24
+      Text: |-
+        =With({r: LookUp(colRows, n = varSel)},
+            Switch(r.k,
+                "stage", r.count & " steps  ·  " & Concat(Distinct(Filter(colRows, s = r.s && k <> "stage"), role), Value, ", "),
+                "decision", "Decision  ·  " & r.role,
+                "auto", "Automated  ·  " & r.role,
+                "Who: " & r.role))
+      Tooltip: =Self.Text
+      Color: =RGBA(97, 97, 97, 1)
+      Font: =Font.'Segoe UI'
+      Size: =11
+- lblError:
+    Control: Label@2.5.1
+    Properties:
+      X: =496
+      Y: =198
+      Width: =838
+      Height: =32
+      Visible: =cmbProcess.Selected.Status = "Error" || IsBlank(cmbProcess.Selected.Data)
+      Text: |-
+        =If(IsBlank(cmbProcess.Selected.Data), "This process couldn't be read: ", "The latest file couldn't be read, so this is the last good version: ") & cmbProcess.Selected.Message
+      Fill: =RGBA(253, 231, 233, 1)
+      Color: =RGBA(164, 38, 44, 1)
+      Font: =Font.'Segoe UI'
+      Size: =10
+      PaddingLeft: =12
+- htmlDetail:
+    Control: HtmlViewer@2.1.0
+    Properties:
+      X: =488
+      Y: =232
+      Width: =854
+      Height: =456
+      HtmlText: |-
+        =With({r: LookUp(colRows, n = varSel)},
+            "<div style='font-family:Segoe UI,sans-serif;font-size:14px;line-height:1.55;color:#242424'>" &
+            If(r.k = "stage",
+                Coalesce(r.detail, If(varSel = 0 && !IsBlank(cmbProcess.Selected.Summary), "<h4>About this process</h4><p>" & cmbProcess.Selected.Summary & "</p>", "")) &
+                "<h4>Steps in this stage</h4><ol>" & Concat(Filter(colRows, s = r.s && k <> "stage"), "<li>" & title & "</li>") & "</ol>",
+                Coalesce(r.detail, "<p style='color:#616161'>Nothing more is recorded for this step in Signavio.</p>")) &
+            "</div>")
+- btnPrev:
+    Control: Classic/Button@2.2.0
+    Properties:
+      X: =496
+      Y: =700
+      Width: =120
+      Height: =36
+      Text: ="‹ Previous"
+      DisplayMode: =If(IsBlank(Last(Filter(colRows, n < varSel && k <> "stage"))), DisplayMode.Disabled, DisplayMode.Edit)
+      OnSelect: |-
+        =Set(varSel, Last(Filter(colRows, n < varSel && k <> "stage")).n);
+        Set(varOpen, LookUp(colRows, n = varSel).s)
+      Fill: =RGBA(255, 255, 255, 1)
+      Color: =RGBA(36, 36, 36, 1)
+      BorderColor: =RGBA(209, 209, 209, 1)
+      BorderThickness: =1
+      HoverFill: =RGBA(245, 245, 245, 1)
+      HoverColor: =RGBA(36, 36, 36, 1)
+      Font: =Font.'Segoe UI'
+      Size: =11
+- btnNext:
+    Control: Classic/Button@2.2.0
+    Properties:
+      X: =1214
+      Y: =700
+      Width: =120
+      Height: =36
+      Text: ="Next ›"
+      DisplayMode: =If(IsBlank(First(Filter(colRows, n > varSel && k <> "stage"))), DisplayMode.Disabled, DisplayMode.Edit)
+      OnSelect: |-
+        =Set(varSel, First(Filter(colRows, n > varSel && k <> "stage")).n);
+        Set(varOpen, LookUp(colRows, n = varSel).s)
+      Fill: =RGBA(15, 108, 189, 1)
+      Color: =RGBA(255, 255, 255, 1)
+      HoverFill: =RGBA(17, 94, 163, 1)
+      HoverColor: =RGBA(255, 255, 255, 1)
+      Font: =Font.'Segoe UI'
+      Size: =11
+- btnSource:
+    Control: Classic/Button@2.2.0
+    Properties:
+      X: =860
+      Y: =700
+      Width: =200
+      Height: =36
+      Text: ="Open BPMN file"
+      Visible: =!IsBlank(cmbProcess.Selected.FileUrl)
+      OnSelect: =Launch(cmbProcess.Selected.FileUrl)
+      Fill: =RGBA(255, 255, 255, 1)
+      Color: =RGBA(15, 108, 189, 1)
+      HoverFill: =RGBA(245, 245, 245, 1)
+      HoverColor: =RGBA(15, 108, 189, 1)
+      BorderThickness: =0
+      Font: =Font.'Segoe UI'
+      Size: =11

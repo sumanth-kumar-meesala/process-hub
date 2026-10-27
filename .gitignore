@@ -1,0 +1,7 @@
+# Signavio exports are company data: never commit them
+*.bpmn
+*.bpmn2
+*.BPMN
+
+node_modules/
+.DS_Store
