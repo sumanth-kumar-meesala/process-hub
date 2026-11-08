@@ -63,8 +63,8 @@ const START_PEOPLE: Person[] = [
 export const useData = create<DataState>()(
   persist(
     (setS, getS) => ({
-      // no sample processes: the processes come from the Signavio BPMN files in the page (Admin → Prepare the page)
-      processes: [],
+      // sample processes so the app isn't empty; Signavio BPMN files in the page add to them (Admin → Prepare the page)
+      processes: SEED,
       people: START_PEOPLE,
       library: SEED_LIBRARY.filter((x) => x.category !== 'process'),
       glossary: SEED_GLOSSARY,
@@ -92,14 +92,14 @@ export const useData = create<DataState>()(
         ps.forEach((p) => { if (p && p.id && p.title && Array.isArray(p.stages)) { getS().upsert(p); n++ } })
         return n
       },
-      // clears what this browser saved (the Signavio processes in the page come back on the next load)
-      resetToStarter: () => setS({ processes: [], library: SEED_LIBRARY.filter((x) => x.category !== 'process') }),
+      // back to the sample processes (the Signavio processes in the page come back on the next load)
+      resetToStarter: () => setS({ processes: SEED, library: SEED_LIBRARY.filter((x) => x.category !== 'process') }),
       setPersonPersona: (id, persona) => setS((s) => ({ people: s.people.map((x) => x.id === id ? { ...x, persona } : x) })),
       addPerson: (name) => setS((s) => ({ people: [...s.people, { id: 'p' + Date.now(), name, note: '', persona: 'performer' }] })),
     }),
     {
       name: 'process-hub-data',
-      version: 11,
+      version: 12,
       storage: createJSONStorage(() => idbStorage),
       partialize: (s) => ({ processes: s.processes, people: s.people, library: s.library, glossary: s.glossary, systems: s.systems }),
       // v2 adds the shared resource library: untouched starter processes get the new version,
@@ -115,7 +115,9 @@ export const useData = create<DataState>()(
           const done = migrateOlder(st, version)
           return { ...done, processes: drop(done.processes) ?? [], library: tidy(done.library) }
         }
-        return migrateOlder(st, version)
+        const done = migrateOlder(st, version)
+        // v12: sample processes are back — give them to data saved while there were none
+        return version === 11 && !done.processes?.length ? { ...done, processes: SEED } : done
       },
       onRehydrateStorage: () => () => { useData.setState({ hydrated: true }) },
     },
