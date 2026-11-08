@@ -110,10 +110,11 @@ The app uses hash URLs (`#/process/...`) so it works from any Pages path without
 
 ## Publish as a SharePoint app (SPFx)
 
-`spfx/` wraps the SharePoint build in a web part (the app runs in an iframe, so its styles stay out of the page). Needs Node 22.14+.
+`spfx/` is a web part that ships the app as a normal script file (no inline script, no `eval`), so it runs under SharePoint's content security policy. It draws into a shadow root, so its styles stay out of the page. Needs Node 22.14+.
 
 ```bash
-npm run build:sharepoint && cd spfx && npm install && npm run package   # -> release/process-hub-spfx.sppkg (copy of spfx/sharepoint/solution/)
+cd spfx && npm install && npm run package   # builds the app (npm run build:spfx), then spfx/sharepoint/solution/process-hub-spfx.sppkg
+cp sharepoint/solution/process-hub-spfx.sppkg ../release/
 ```
 
-Upload the `.sppkg` to the App Catalog → Deploy, add the app to a site, then add the **Process Hub** web part to a page (use a full-width section, or a single-part app page).
+Upload the `.sppkg` to the App Catalog → Deploy, add the app to a site, then add the **Process Hub** web part to a page (full-width section, or a single-part app page).

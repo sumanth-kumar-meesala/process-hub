@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist",
+    "build:spfx": "tsc -b && vite build --mode spfx",
     "build:sharepoint": "tsc -b && vite build --mode sharepoint && node scripts/finish-sharepoint-build.mjs"
   },
   "dependencies": {

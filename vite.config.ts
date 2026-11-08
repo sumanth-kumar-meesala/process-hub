@@ -17,6 +17,18 @@ const inlineFavicon = (): Plugin => ({
 // (all JavaScript, styles and the icon inside it) to upload to a SharePoint library.
 export default defineConfig(({ mode }) => {
   const sharepoint = mode === 'sharepoint'
+  // `vite build --mode spfx` (npm run build:spfx): the app as ONE plain .js file for the SPFx web part (see src/spfx.tsx)
+  if (mode === 'spfx') return {
+    plugins: [react(), tailwindcss()],
+    resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
+    define: { 'process.env.NODE_ENV': '"production"' },
+    publicDir: false,
+    build: {
+      outDir: 'spfx/app', emptyOutDir: true, assetsInlineLimit: Infinity, cssCodeSplit: false, chunkSizeWarningLimit: 4000,
+      lib: { entry: 'src/spfx.tsx', formats: ['es'], fileName: () => 'process-hub.js' },
+      rolldownOptions: { output: { codeSplitting: false } },
+    },
+  }
   return {
     base: './',
     plugins: [react(), tailwindcss(), ...(sharepoint ? [viteSingleFile(), inlineFavicon()] : [])],

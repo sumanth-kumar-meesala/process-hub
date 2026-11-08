@@ -32,4 +32,4 @@ obj
 
 # Styles Generated Code
 *.scss.ts
-src/webparts/processHub/appHtml.ts
+app/

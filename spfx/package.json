@@ -10,7 +10,7 @@
     "build": "gulp bundle",
     "clean": "gulp clean",
     "test": "gulp test",
-    "package": "node prebuild.mjs && gulp clean && gulp bundle --ship && gulp package-solution --ship"
+    "package": "cd .. && npm run build:spfx && cd spfx && gulp clean && gulp bundle --ship && gulp package-solution --ship"
   },
   "dependencies": {
     "tslib": "2.3.1",
