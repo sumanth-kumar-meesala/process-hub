@@ -3,7 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { bpmnToProcess } from '@/lib/bpmn'
 import { listBpmnFiles, onSharePoint, parseFolderUrl, readSpFile, SpError } from '@/lib/sharepoint'
 import { useData } from './store'
-import { inSandbox, localOrMemory } from '@/lib/sandbox'
+import { hostWindow, inSandbox, localOrMemory } from '@/lib/sandbox'
 import { pageFiles, unpackFile, type PageFile } from '@/lib/pagefiles'
 
 // ---------- SharePoint HTML pages: files linked into the page ("live data") ----------
@@ -132,7 +132,7 @@ export const useBpmn = create<BpmnState>()(
 )
 
 /** The folder this page was opened from, e.g. https://<company>.sharepoint.com/sites/Ops/Shared Documents/Process Hub */
-export const pageFolder = () => onSharePoint() ? `${location.origin}${location.pathname.replace(/\/[^/]*$/, '')}` : ''
+export const pageFolder = () => onSharePoint() ? `${hostWindow().location.origin}${hostWindow().location.pathname.replace(/\/[^/]*$/, '')}` : ''
 
 /** The folder in use: the one chosen in the app, or else the page's own folder. */
 export const activeFolder = () => useBpmn.getState().folderOverride || pageFolder()

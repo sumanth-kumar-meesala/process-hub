@@ -7,6 +7,8 @@
  * the browser blocks these requests.
  */
 
+import { hostWindow } from '@/lib/sandbox'
+
 export interface SpFile {
   name: string
   /** server-relative path, e.g. /sites/Ops/Shared Documents/BPMN/Purchase.bpmn */
@@ -36,7 +38,7 @@ export function parseFolderUrl(raw: string, base = location.href): SpFolder | nu
 
 const safeDecode = (s: string) => { try { return decodeURIComponent(s) } catch { return s } }
 
-export const onSharePoint = () => /\.sharepoint(-df)?\.(com|us|de|cn)$/i.test(location.hostname)
+export const onSharePoint = () => /\.sharepoint(-df)?\.(com|us|de|cn)$/i.test(hostWindow().location.hostname)
 
 /** '…' as a REST parameter alias value. */
 const alias = (p: string) => `'${encodeURIComponent(p.replace(/'/g, "''"))}'`

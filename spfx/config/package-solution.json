@@ -1,0 +1,40 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/spfx-build/package-solution.schema.json",
+  "solution": {
+    "name": "Process Hub",
+    "id": "09eef10a-a881-44b0-94c7-d9b808b21364",
+    "version": "1.0.0.0",
+    "includeClientSideAssets": true,
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "developer": {
+      "name": "",
+      "websiteUrl": "",
+      "privacyUrl": "",
+      "termsOfUseUrl": "",
+      "mpnId": "Undefined-1.21.1"
+    },
+    "metadata": {
+      "shortDescription": {
+        "default": "Process Hub: business processes explained in plain words, with a 3D story view."
+      },
+      "longDescription": {
+        "default": "Process Hub: business processes explained in plain words, with a 3D story view."
+      },
+      "screenshotPaths": [],
+      "videoUrl": "",
+      "categories": []
+    },
+    "features": [
+      {
+        "title": "Process Hub Feature",
+        "description": "The feature that activates elements of the process-hub-spfx solution.",
+        "id": "02bcdaf6-d4b3-45ab-b583-1dcb31a75f2a",
+        "version": "1.0.0.0"
+      }
+    ]
+  },
+  "paths": {
+    "zippedPackage": "solution/process-hub-spfx.sppkg"
+  }
+}

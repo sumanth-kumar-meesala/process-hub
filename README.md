@@ -107,3 +107,13 @@ git push -u origin main
 ```
 
 The app uses hash URLs (`#/process/...`) so it works from any Pages path without extra configuration. The mockup images in this folder are listed in `.gitignore`, so they are not uploaded.
+
+## Publish as a SharePoint app (SPFx)
+
+`spfx/` wraps the SharePoint build in a web part (the app runs in an iframe, so its styles stay out of the page). Needs Node 22.14+.
+
+```bash
+npm run build:sharepoint && cd spfx && npm install && npm run package   # -> release/process-hub-spfx.sppkg (copy of spfx/sharepoint/solution/)
+```
+
+Upload the `.sppkg` to the App Catalog → Deploy, add the app to a site, then add the **Process Hub** web part to a page (use a full-width section, or a single-part app page).

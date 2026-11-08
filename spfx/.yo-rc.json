@@ -1,0 +1,22 @@
+{
+  "@microsoft/generator-sharepoint": {
+    "whichFolder": "subdir",
+    "solutionName": "process-hub-spfx",
+    "environment": "spo",
+    "skipFeatureDeployment": true,
+    "isDomainIsolated": false,
+    "componentType": "webpart",
+    "template": "none",
+    "componentName": "ProcessHub",
+    "componentDescription": "Process Hub",
+    "plusBeta": false,
+    "isCreatingSolution": true,
+    "nodeVersion": "22.4.0",
+    "sdksVersions": {},
+    "version": "1.21.1",
+    "libraryName": "process-hub-spfx",
+    "libraryId": "09eef10a-a881-44b0-94c7-d9b808b21364",
+    "packageManager": "npm",
+    "solutionShortDescription": "process-hub-spfx description"
+  }
+}

@@ -20,8 +20,8 @@ const Builder = lazy(() => import('@/pages/Builder'))
 const Admin = lazy(() => import('@/pages/Admin'))
 const GuidePage = lazy(() => import('@/pages/GuidePage'))
 
-// SharePoint's HTML-page viewer doesn't allow history.pushState, which HashRouter uses
-const Router = inSandbox ? SandboxRouter : HashRouter
+// SharePoint's HTML-page viewer and the SPFx web part's srcdoc frame don't work with HashRouter (history.pushState)
+const Router = inSandbox || location.protocol === 'about:' ? SandboxRouter : HashRouter
 
 const Loading = () => <div className="p-10 text-on-surface-variant">Loading…</div>
 
