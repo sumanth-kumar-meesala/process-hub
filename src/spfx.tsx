@@ -7,6 +7,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { SandboxRouter } from '@/components/SandboxRouter'
 import { App } from '@/App'
+import { configureEmbed, syncBpmn, type EmbedConfig } from '@/store/bpmn'
 import appCss from './index.css?inline'
 import flowCss from '@xyflow/react/dist/style.css?inline'
 import f400 from '@fontsource/figtree/latin-400.css?inline'
@@ -17,7 +18,9 @@ import f800 from '@fontsource/figtree/latin-800.css?inline'
 
 const style = (css: string) => Object.assign(document.createElement('style'), { textContent: css })
 
-export function mount(host: HTMLElement): () => void {
+/** `config`: from the web part's properties; `update` applies changed properties without reloading the page. */
+export function mount(host: HTMLElement, config: EmbedConfig = {}): { unmount: () => void; update: (c: EmbedConfig) => void } {
+  configureEmbed(config)
   // @font-face and @property (Tailwind's --tw-* defaults: borders, rings, shadows) are ignored inside a shadow root,
   // so they go into the page head (once); the names are all --tw-… so they can't clash with the page
   if (!document.getElementById('process-hub-fonts')) {
@@ -31,5 +34,5 @@ export function mount(host: HTMLElement): () => void {
   root.replaceChildren(style(appCss + flowCss), shell)
   const r = createRoot(shell)
   r.render(<StrictMode><App Router={SandboxRouter} /></StrictMode>)
-  return () => r.unmount()
+  return { unmount: () => r.unmount(), update: (c) => { configureEmbed(c); void syncBpmn() } }
 }

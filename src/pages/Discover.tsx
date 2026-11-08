@@ -114,6 +114,7 @@ export default function Discover() {
                     <span className="flex flex-wrap items-center gap-2">
                       <span className="text-lg font-extrabold">{displayName(p)}</span>
                       {p.source?.kind === 'bpmn' && <span className="rounded-full bg-primary-container px-2 py-0.5 text-xs font-bold text-on-primary-container">Signavio</span>}
+                      {p.seeded && <span className="rounded-full bg-surface-mid px-2 py-0.5 text-xs font-bold text-on-surface-variant">Sample</span>}
                       {p.status === 'draft' && <span className="rounded-full bg-surface-mid px-2 py-0.5 text-xs font-bold">Draft</span>}
                       {mine && <span className="rounded-full bg-secondary-container px-2 py-0.5 text-xs font-bold text-on-secondary-container">You're in this</span>}
                       {p.needsCompleting && <span className="rounded-full bg-tertiary-container px-2 py-0.5 text-xs font-bold text-[#9A4A00]">Being completed</span>}

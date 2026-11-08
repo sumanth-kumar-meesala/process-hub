@@ -98,20 +98,26 @@ async function siteFor(f: SpFolder): Promise<string> {
 const isBpmn = (name: string) => /\.(bpmn|bpmn2)$/i.test(name) || /\.xml$/i.test(name)
 
 /** Lists the BPMN files in a folder and its sub-folders (up to three levels down). */
-export async function listBpmnFiles(folder: SpFolder): Promise<{ site: string; files: SpFile[] }> {
+export async function listBpmnFiles(folder: SpFolder): Promise<{ site: string; files: SpFile[]; limits: string[] }> {
   const site = await siteFor(folder)
   const files: SpFile[] = []
+  const limits: string[] = []
   const walk = async (path: string, rel: string, depth: number) => {
     const a = `@a1=${alias(path)}`
     const [fs, ds] = await Promise.all([
       api<{ value: { Name: string; ServerRelativeUrl: string; TimeLastModified: string }[] }>(`${site}/_api/web/GetFolderByServerRelativePath(decodedurl=@a1)/Files?${a}&$select=Name,ServerRelativeUrl,TimeLastModified&$top=2000`),
-      depth < 3 ? api<{ value: { Name: string; ServerRelativeUrl: string }[] }>(`${site}/_api/web/GetFolderByServerRelativePath(decodedurl=@a1)/Folders?${a}&$select=Name,ServerRelativeUrl&$top=500`) : Promise.resolve({ value: [] }),
+      api<{ value: { Name: string; ServerRelativeUrl: string }[] }>(`${site}/_api/web/GetFolderByServerRelativePath(decodedurl=@a1)/Folders?${a}&$select=Name,ServerRelativeUrl&$top=500`),
     ])
+    // the reader has ceilings; say so instead of silently dropping files
+    const where = rel || 'the folder'
+    if (fs.value.length >= 2000) limits.push(`${where} has 2000 or more files; only the first 2000 are read.`)
+    if (ds.value.length >= 500) limits.push(`${where} has 500 or more sub-folders; only the first 500 are read.`)
+    if (depth >= 3 && ds.value.some((d) => d.Name !== 'Forms' && !d.Name.startsWith('_'))) limits.push(`Sub-folders of ${where} are not read (only 3 levels down are).`)
     fs.value.filter((f) => isBpmn(f.Name)).forEach((f) => files.push({ name: f.Name, path: f.ServerRelativeUrl, modified: f.TimeLastModified, folder: rel }))
-    await Promise.all(ds.value.filter((d) => d.Name !== 'Forms' && !d.Name.startsWith('_')).map((d) => walk(d.ServerRelativeUrl, rel ? `${rel} / ${d.Name}` : d.Name, depth + 1)))
+    if (depth < 3) await Promise.all(ds.value.filter((d) => d.Name !== 'Forms' && !d.Name.startsWith('_')).map((d) => walk(d.ServerRelativeUrl, rel ? `${rel} / ${d.Name}` : d.Name, depth + 1)))
   }
   await walk(folder.path, '', 0)
-  return { site, files }
+  return { site, files, limits }
 }
 
 export const readSpFile = (site: string, path: string) =>

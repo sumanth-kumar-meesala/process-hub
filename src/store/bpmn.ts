@@ -1,8 +1,10 @@
+import type { Process } from '@/lib/types'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { bpmnToProcess } from '@/lib/bpmn'
 import { listBpmnFiles, onSharePoint, parseFolderUrl, readSpFile, SpError } from '@/lib/sharepoint'
 import { useData } from './store'
+import { SEED } from '@/data/seed'
 import { hostWindow, inSandbox, localOrMemory } from '@/lib/sandbox'
 import { pageFiles, unpackFile, type PageFile } from '@/lib/pagefiles'
 
@@ -100,11 +102,26 @@ export const refreshLiveData = () => { try { window.parent.postMessage({ type: '
  *    Only files that changed since last time are downloaded again; processes whose file was removed are removed.
  */
 
-export interface FileIssue { file: string; reason: string }
+/** `note`: something worth knowing (a limit, an approximation), not a failure */
+export interface FileIssue { file: string; reason: string; note?: boolean }
+
+/**
+ * Settings from the SPFx web part (set by whoever edits the page), which win over the folder a person picked in their own browser.
+ * `active` = running as the web part, where the page's own folder (Site Pages) is no use as a default.
+ */
+export const embed = { active: false, folder: '', showSamples: true, user: '' }
+export type EmbedConfig = Partial<Omit<typeof embed, 'active'>>
+export const configureEmbed = (c: EmbedConfig) => {
+  const bringBack = c.showSamples && !embed.showSamples // samples were hidden, now shown again
+  Object.assign(embed, { active: true }, c)
+  if (bringBack) { const d = useData.getState(); SEED.filter((p) => !d.processes.some((x) => x.id === p.id)).forEach((p) => d.upsert(p)) }
+}
 
 interface BpmnState {
   /** folder chosen in the app, kept in this browser only ('' = the page's own folder) */
   folderOverride: string
+  /** who last loaded files here: when someone else signs in on this browser, files cached for the first person are dropped */
+  lastUser: string
   /** 'page': files linked into this SharePoint page; 'folder': a folder read through SharePoint's REST API */
   mode: 'page' | 'folder'
   /** for 'page': the folder the files were picked from, and when the page was prepared */
@@ -120,6 +137,7 @@ export const useBpmn = create<BpmnState>()(
   persist(
     (set) => ({
       folderOverride: '',
+      lastUser: '',
       // inside SharePoint's page viewer (or wherever SharePoint handed over files) the linked files are used
       mode: inSandbox || !!liveResults() || pageFiles().length > 0 ? 'page' : 'folder',
       status: 'off',
@@ -127,15 +145,15 @@ export const useBpmn = create<BpmnState>()(
       issues: [],
       setFolderOverride: (folderOverride) => set({ folderOverride: folderOverride.trim() }),
     }),
-    { name: 'process-hub-bpmn', storage: createJSONStorage(localOrMemory), partialize: (s) => ({ folderOverride: s.folderOverride }) },
+    { name: 'process-hub-bpmn', storage: createJSONStorage(localOrMemory), partialize: (s) => ({ folderOverride: s.folderOverride, lastUser: s.lastUser }) },
   ),
 )
 
 /** The folder this page was opened from, e.g. https://<company>.sharepoint.com/sites/Ops/Shared Documents/Process Hub */
-export const pageFolder = () => onSharePoint() ? `${hostWindow().location.origin}${hostWindow().location.pathname.replace(/\/[^/]*$/, '')}` : ''
+export const pageFolder = () => onSharePoint() && !embed.active ? `${hostWindow().location.origin}${hostWindow().location.pathname.replace(/\/[^/]*$/, '')}` : ''
 
 /** The folder in use: the one chosen in the app, or else the page's own folder. */
-export const activeFolder = () => useBpmn.getState().folderOverride || pageFolder()
+export const activeFolder = () => embed.folder || useBpmn.getState().folderOverride || pageFolder()
 
 /** A short, readable form of a folder address, e.g. "Shared Documents / Process Hub". */
 export const folderLabel = (raw: string) => {
@@ -163,16 +181,24 @@ export const syncBpmn = () => (running ??= doSync().finally(() => { running = nu
 async function doSync() {
   const set = useBpmn.setState
   if (useBpmn.getState().mode === 'page') { await loadPageFiles(); return }
+  dropSamples()
   const raw = activeFolder()
-  if (!raw) { set({ status: 'off', message: '', issues: [] }); return }
+  if (!raw) {
+    if (embed.active) set({ status: 'error', issues: [], message: 'No folder with the BPMN files is set. Edit the page and set it in the Process Hub web part properties.' })
+    else set({ status: 'off', message: '', issues: [] })
+    return
+  }
   const folder = parseFolderUrl(raw)
   if (!folder) { set({ status: 'error', message: "The BPMN folder address doesn't look right.", issues: [] }); return }
   set({ status: 'loading', message: '' })
+  const fromSp = () => useData.getState().processes.filter((p) => p.source?.kind === 'bpmn' && p.source.path?.startsWith('/'))
+  const dropFromSp = (keep: (p: Process) => boolean = () => false) => fromSp().filter((p) => !keep(p)).forEach((p) => useData.getState().remove(p.id))
+  // someone else signed in on this browser: nothing read for the previous person stays
+  if (embed.user && useBpmn.getState().lastUser !== embed.user) { dropFromSp(); failed.clear(); set({ lastUser: embed.user }) }
   try {
-    const { site, files } = await listBpmnFiles(folder)
-    const fromSp = () => useData.getState().processes.filter((p) => p.source?.kind === 'bpmn' && p.source.path?.startsWith('/'))
+    const { site, files, limits } = await listBpmnFiles(folder)
     const known = new Map(fromSp().map((p) => [p.source!.path!, p]))
-    const issues: FileIssue[] = []
+    const issues: FileIssue[] = limits.map((reason) => ({ file: 'Folder', reason, note: true }))
     const changed = files.filter((f) => {
       const fail = failed.get(f.path)
       if (fail?.modified === f.modified) { if (fail.issue) issues.push(fail.issue); return false }
@@ -185,25 +211,38 @@ async function doSync() {
         const d = useData.getState()
         if (r.library.length) d.addLibraryItems(r.library)
         d.upsert(r.process)
+        r.warnings.forEach((w) => issues.push({ file: f.name, reason: w, note: true }))
       } catch (e) {
+        // no longer allowed to read it: don't keep showing what was read earlier
+        if (e instanceof SpError && (e.status === 401 || e.status === 403)) { const old = known.get(f.path); if (old) useData.getState().remove(old.id) }
+        const stale = known.has(f.path) && !(e instanceof SpError && (e.status === 401 || e.status === 403))
         // other (non-BPMN) .xml files in the folder are skipped quietly
         const notBpmn = /not a BPMN|not valid XML/i.test(reason(e))
-        const issue = /\.xml$/i.test(f.name) && notBpmn ? null : { file: f.name, reason: reason(e) }
+        const issue = /\.xml$/i.test(f.name) && notBpmn ? null : { file: f.name, reason: reason(e) + (stale ? ' — still showing the previous version' : '') }
         if (issue) issues.push(issue)
         if (!(e instanceof SpError)) failed.set(f.path, { modified: f.modified, issue })
       }
     })
     // files that are no longer in the folder (or a different folder was chosen)
     const paths = new Set(files.map((f) => f.path))
-    fromSp().filter((p) => !paths.has(p.source!.path!)).forEach((p) => useData.getState().remove(p.id))
+    dropFromSp((p) => paths.has(p.source!.path!))
     const count = fromSp().length
     set({
       status: 'ok', issues, lastSync: new Date().toISOString(),
       message: files.length ? `${count} process${count === 1 ? '' : 'es'} from Signavio` : 'The folder has no .bpmn files yet',
     })
   } catch (e) {
+    // access was taken away: remove what was read with it
+    if (e instanceof SpError && (e.status === 401 || e.status === 403)) dropFromSp()
     set({ status: 'error', message: reason(e), issues: [] })
   }
+}
+
+/** The web part's "show sample processes" switch: off removes the demonstration processes. */
+function dropSamples() {
+  if (embed.showSamples) return
+  const d = useData.getState()
+  d.processes.filter((p) => p.seeded).forEach((p) => d.remove(p.id))
 }
 
 /** Adds .bpmn files picked from the computer (works anywhere, also outside SharePoint). */

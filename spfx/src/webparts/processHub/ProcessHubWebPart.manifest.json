@@ -21,6 +21,6 @@
     "title": { "default": "Process Hub" },
     "description": { "default": "Process Hub" },
     "officeFabricIconFontName": "Page",
-    "properties": {}
+    "properties": { "bpmnFolder": "", "showSamples": true }
   }]
 }

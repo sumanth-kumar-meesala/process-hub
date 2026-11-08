@@ -118,3 +118,5 @@ cp sharepoint/solution/process-hub-spfx.sppkg ../release/
 ```
 
 Upload the `.sppkg` to the App Catalog → Deploy, add the app to a site, then add the **Process Hub** web part to a page (full-width section, or a single-part app page).
+
+**Signavio processes in the web part** — edit the page, select the web part and set **Folder with the .bpmn files** (paste the folder's address from SharePoint; sub-folders are read too). The setting is part of the page, so everyone sees the same folder. Each viewer reads the files with their own SharePoint access: someone without access sees an error, and anything read earlier is removed from their browser, as it is when a different person signs in on the same browser. Turn **Show sample processes** off for production. The reader says so when a folder is over its limits (2000 files, 500 sub-folders, 3 levels), and keeps the previous version of a file whose update can't be parsed, saying so.

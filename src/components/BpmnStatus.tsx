@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, FileWarning, FolderOpen, HelpCircle, Loader2, RefreshCw, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { activeFolder, folderLabel, pageFolder, refreshLiveData, syncBpmn, useBpmn } from '@/store/bpmn'
+import { activeFolder, embed, folderLabel, pageFolder, refreshLiveData, syncBpmn, useBpmn } from '@/store/bpmn'
 import { parseFolderUrl } from '@/lib/sharepoint'
 import { useData } from '@/store/store'
 import { inSandbox } from '@/lib/sandbox'
@@ -72,23 +72,26 @@ export function BpmnStatus({ canChange = true }: { canChange?: boolean }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {folder && (
           <span className="inline-flex items-center gap-1.5" title={decodeURIComponent(parseFolderUrl(folder)?.path ?? folder)}>
-            <FolderOpen size={14} aria-hidden /><b className="text-on-surface">{folderLabel(folder)}</b>{!folderOverride && ' (this page’s folder)'}
+            <FolderOpen size={14} aria-hidden /><b className="text-on-surface">{folderLabel(folder)}</b>{embed.folder ? ' (set for this page)' : !folderOverride && ' (this page’s folder)'}
           </span>
         )}
         {status === 'loading' && <span className="inline-flex items-center gap-1.5"><Loader2 size={14} className="animate-spin" aria-hidden />Loading the Signavio processes…</span>}
         {status === 'ok' && <span className="inline-flex items-center gap-1.5"><Workflow size={14} className="text-primary" aria-hidden />{message} · updated {ago(lastSync)}</span>}
         {status === 'error' && <span className="inline-flex items-center gap-1.5 text-error"><AlertTriangle size={14} aria-hidden />Couldn't load the Signavio processes: {message}</span>}
         <button onClick={() => syncBpmn()} disabled={status === 'loading'} className={link}><RefreshCw size={13} aria-hidden />Refresh</button>
-        {canChange && !picking && <button onClick={() => setPicking(true)} className={link}><FolderOpen size={13} aria-hidden />Change folder</button>}
+        {canChange && !embed.folder && !picking && <button onClick={() => setPicking(true)} className={link}><FolderOpen size={13} aria-hidden />Change folder</button>}
         {issues.length > 0 && (
           <button onClick={() => setOpen(!open)} className="inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 text-[13px] font-bold text-[#9A4A00]">
-            <FileWarning size={13} aria-hidden />{issues.length} file{issues.length === 1 ? '' : 's'} couldn't be read
+            <FileWarning size={13} aria-hidden />{(() => {
+              const notes = issues.filter((x) => x.note).length, bad = issues.length - notes
+              return [bad && `${bad} file${bad === 1 ? '' : 's'} couldn't be read`, notes && `${notes} note${notes === 1 ? '' : 's'}`].filter(Boolean).join(' · ')
+            })()}
           </button>
         )}
       </div>
       {open && issues.length > 0 && (
         <ul className="m-0 pl-5">
-          {issues.map((x) => <li key={x.file}><b>{x.file}</b>: {x.reason}</li>)}
+          {issues.map((x, i) => <li key={`${x.file}-${i}`}><b>{x.file}</b>{x.note ? ' (note)' : ''}: {x.reason}</li>)}
         </ul>
       )}
       {picking && <div className="border-t border-surface-mid pt-3"><BpmnFolderPicker onDone={() => setPicking(false)} /></div>}
